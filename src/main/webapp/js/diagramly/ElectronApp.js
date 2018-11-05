@@ -81,7 +81,7 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 
 		var editorUi = this.editorUi;
 
-		editorUi.actions.put('offline', new Action(mxResources.get('online') + '...', function()
+		editorUi.actions.put('useOffline', new Action(mxResources.get('useOffline') + '...', function()
 		{
 			editorUi.openLink('https://www.draw.io/')
 		}));
@@ -171,10 +171,10 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 			           
 		        if (paths !== undefined && paths[0] != null)
 		        {
-			        	var path = paths[0];
-			        	var asImage = /\.png$/i.test(path) || /\.gif$/i.test(path) || /\.jpe?g$/i.test(path);
-			        	var encoding = (asImage || /\.vsdx$/i.test(path) || /\.vssx$/i.test(path)) ?
-			        		'base64' : 'utf-8';
+		        	var path = paths[0];
+		        	var asImage = /\.png$/i.test(path) || /\.gif$/i.test(path) || /\.jpe?g$/i.test(path);
+		        	var encoding = (asImage || /\.vsdx$/i.test(path) || /\.vssx$/i.test(path)) ?
+		        		'base64' : 'utf-8';
 
 					if (editorUi.spinner.spin(document.body, mxResources.get('loading')))
 					{
@@ -635,10 +635,6 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 				this.fileObject.type = 'utf-8';
 				fn();
 			}
-	        else if (error != null)
-			{
-				error();
-			}
 		}
 		else
 		{
@@ -674,10 +670,6 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 			this.fileObject.name = path.replace(/^.*[\\\/]/, '');
 			this.fileObject.type = 'utf-8';
 			this.save(false, success, error);
-		}
-        else if (error != null)
-		{
-			error();
 		}
 	};
 

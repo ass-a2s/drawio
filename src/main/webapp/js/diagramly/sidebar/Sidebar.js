@@ -21,7 +21,7 @@
 	/**
 	 * Aliases for IDs in the libs parameter.
 	 */
-	Sidebar.prototype.libAliases = {'aws2': 'aws3'};
+	Sidebar.prototype.libAliases = {'aws2': 'aws3', 'gcp' : 'gcp2'};
 	
 	/**
 	 * 
@@ -47,6 +47,12 @@
 	 * 
 	 */
 	Sidebar.prototype.gcp = ['Cards', 'Big Data', 'Compute', 'Developer Tools', 'Extras', 'Identity and Security', 'Machine Learning', 'Management Tools', 'Networking', 'Storage Databases'];
+	
+	/**
+	 * 
+	 */
+	Sidebar.prototype.gcp2 = ['Paths', 'Zones', 'Service Cards', 'Compute', 'API Platform and Ecosystems', 'Identity and Security', 'Big Data', 'Data Transfer', 'Cloud AI', 'Internet of Things', 'Storage and Databases', 'Management Tools', 'Networking', 'Developer Tools', 'Expanded Product Cards', 'User Device Cards', 'Product Cards'];
+	
 	/**
 	 *
 	 */
@@ -122,12 +128,25 @@
 	Sidebar.prototype.electrical = ['LogicGates', 'Resistors', 'Capacitors', 'Inductors', 'SwitchesRelays', 'Diodes', 'Sources', 'Transistors', 'Misc', 'Audio', 'PlcLadder', 'Abstract', 'Optical', 'VacuumTubes', 'Waveforms', 'Instruments', 'RotMech', 'Transmission'];
 
 	/**
+	 * Description of custom libraries, see https://desk.draw.io/a/solutions/articles/16000058316
+	 */
+	Sidebar.prototype.customEntries = null;
+	
+	/**
+	 * Array of strings for the built-in libraries to be enabled in the more shapes dialog. Null means all,
+	 * empty array means none, possible keys are listed for the libs parameter at
+	 * 
+	 * https://desk.draw.io/support/solutions/articles/16000042546
+	 */
+	Sidebar.prototype.enabledLibraries = null;
+
+	/**
 	 *
 	 */
 	Sidebar.prototype.configuration = [{id: 'general', libs: ['general', 'misc', 'advanced']}, {id: 'uml'}, {id: 'search'}, {id: 'er'},
 	                                   {id: 'ios', prefix: 'ios', libs: [''/*prefix is library*/, '7icons', '7ui']}, 
 	                                   {id: 'android', prefix: 'android', libs: [''/*prefix is library*/]}, {id: 'aws3d'},
-	                                   {id: 'flowchart'}, {id: 'basic'}, {id: 'infographic'}, {id: 'arrows'}, {id: 'arrows2'}, {id: 'lean_mapping'}, {id: 'citrix'}, {id: 'azure'}, {id: 'network'}, {id: 'sitemap'},
+	                                   {id: 'flowchart'}, {id: 'basic'}, {id: 'infographic'}, {id: 'arrows'}, {id: 'arrows2'}, {id: 'lean_mapping'}, {id: 'citrix'}, {id: 'azure'}, {id: 'network'}, {id: 'sitemap'}, 
 	                                   
 	                                   {id: 'mscae', prefix: 'mscae', libs: ['Cloud', 'Enterprise', 'General', 'General Symbols', 'Intune', 'OMS', 'OpsManager', 'Other', 'System Center', 'Virtual Machine', 'Deprecated', 'Cloud Color', 'Deprecated Color']},
 	                                   
@@ -142,6 +161,7 @@
 	                                        	                          'Mixers', 'Piping', 'Pumps', 'Pumps DIN', 'Pumps ISO', 'Separators', 'Shaping Machines', 'Valves', 'Vessels']},
            	                           {id: 'signs', prefix: 'signs', libs: Sidebar.prototype.signs},
            	                           {id: 'gcp', prefix: 'gcp', libs: Sidebar.prototype.gcp},
+           	                           {id: 'gcp2', prefix: 'gcp2', libs: Sidebar.prototype.gcp2},
            	                           {id: 'rack', prefix: 'rack', libs: Sidebar.prototype.rack},
            	                           {id: 'electrical', prefix: 'electrical', libs: Sidebar.prototype.electrical},
            	                           {id: 'aws2', prefix: 'aws2', libs: Sidebar.prototype.aws2},
@@ -295,6 +315,36 @@
 				{
 					return elts[0].style.display != 'none';
 				}
+				
+				break;
+			}
+		}
+		
+		if (this.customEntries != null)
+		{
+			for (var i = 0; i < this.customEntries.length; i++)
+			{
+				var section = this.customEntries[i];
+				
+				for (var j = 0; j < section.entries.length; j++)
+				{
+					var entry = section.entries[j];
+					
+					if (entry.id == key)
+					{
+						if (entry.libs != null && entry.libs.length > 0)
+						{
+							var elts = this.palettes[entry.id + '.0'];
+							
+							if (elts != null)
+							{
+								return elts[0].style.display != 'none';
+							}
+						}
+					
+						break;
+					}
+				}
 			}
 		}
 		
@@ -324,6 +374,31 @@
 				this.showPalettes(this.configuration[i].prefix || '',
 					this.configuration[i].libs || [this.configuration[i].id],
 					mxUtils.indexOf(tmp, this.configuration[i].id) >= 0);
+			}
+		}
+		
+		if (this.customEntries != null)
+		{
+			for (var i = 0; i < this.customEntries.length; i++)
+			{
+				var section = this.customEntries[i];
+				
+				for (var j = 0; j < section.entries.length; j++)
+				{
+					var entry = section.entries[j];
+					
+					if (entry.libs != null && entry.libs.length > 0)
+					{
+						var libs = [];
+						
+						for (var k = 0; k < entry.libs.length; k++)
+						{
+							libs.push(entry.id + '.' + k);
+						}
+						
+						this.showPalettes('', libs, mxUtils.indexOf(tmp, entry.id) >= 0);
+					}
+				}
 			}
 		}
 		
@@ -366,7 +441,7 @@
             			          {title: mxResources.get('cisco'), id: 'cisco', image: IMAGE_PATH + '/sidebar-cisco.png'},
             			          {title: 'Cisco Safe', id: 'cisco_safe', image: IMAGE_PATH + '/sidebar-cisco_safe.png'},
             			          {title: 'Citrix', id: 'citrix', image: IMAGE_PATH + '/sidebar-citrix.png'},
-            			          {title: 'Google Cloud Platform', id: 'gcp', image: IMAGE_PATH + '/sidebar-gcp.png'},
+            			          {title: 'Google Cloud Platform', id: 'gcp2', image: IMAGE_PATH + '/sidebar-gcp2.png'},
             			          {title: 'IBM', id: 'ibm', image: IMAGE_PATH + '/sidebar-ibm.png'},
             			          {title: 'Network', id: 'network', image: IMAGE_PATH + '/sidebar-network.png'},
             			          {title: 'Office', id: 'office', image: IMAGE_PATH + '/sidebar-office.png'},
@@ -679,7 +754,91 @@
 		}
 
 		this.addSearchPalette(true);
-		this.addGeneralPalette(true);
+		
+		// Adds custom sections first
+		if (this.customEntries != null)
+		{
+			for (var i = 0; i < this.customEntries.length; i++)
+			{
+				var section = this.customEntries[i];
+				
+				for (var j = 0; j < section.entries.length; j++)
+				{
+					var entry = section.entries[j];
+					
+					for (var k = 0; k < entry.libs.length; k++)
+					{
+						(mxUtils.bind(this, function(lib)
+						{
+							this.addPalette(entry.id + '.' + k, this.editorUi.getResource(lib.title),
+								false, mxUtils.bind(this, function(content, title)
+							{
+								var dataLoaded = mxUtils.bind(this, function(images)
+								{
+									this.editorUi.addLibraryEntries(images, content);
+								});
+								
+								var showError = mxUtils.bind(this, function(err)
+								{
+									content.innerHTML = '';
+									var div = document.createElement('div');
+									div.style.color = 'rgb(179, 179, 179)';
+									div.style.textAlign = 'center';
+									div.style.paddingTop = '6px';
+									mxUtils.write(div, err);
+									content.appendChild(div);
+								});
+								
+								if (lib.data)
+								{
+									dataLoaded(lib.data);
+								}
+								else
+								{
+									content.style.display = 'none';
+									title.innerHTML = '';
+									mxUtils.write(title, mxResources.get('loading') + '...');
+									var url = lib.url;
+									
+									if (!this.editorUi.isCorsEnabledForUrl(url))
+									{
+										url = PROXY_URL + '?url=' + encodeURIComponent(url);
+									}
+									
+									this.editorUi.loadUrl(url, mxUtils.bind(this, function(data)
+									{
+										content.style.display = 'block';
+										title.innerHTML = '';
+										mxUtils.write(title, this.editorUi.getResource(lib.title));
+
+										try
+										{
+											var doc = mxUtils.parseXml(data);
+											
+											if (doc.documentElement.nodeName == 'mxlibrary')
+											{
+												var images = JSON.parse(mxUtils.getTextContent(doc.documentElement));
+												dataLoaded(images);
+											}
+											else
+											{
+												showError(mxResources.get('notALibraryFile'));
+											}
+										}
+										catch (e)
+										{
+											showError(mxResources.get('error') + ': ' + e.message);
+										}
+									}));
+								}
+							}));
+						}))(entry.libs[k]);
+					}
+				}
+			}
+		}
+		
+		this.addGeneralPalette(this.customEntries == null);
 		this.addMiscPalette(false);
 		this.addAdvancedPalette(false);
 		this.addUmlPalette(false);
@@ -705,6 +864,7 @@
 		this.addIBMPalette();
 		this.addAlliedTelesisPalette();
 		this.addSitemapPalette();
+		this.addGCP2Palette();
 
 		this.addStencilPalette('arrows', mxResources.get('arrows'), dir + '/arrows.xml',
 				';html=1;' + mxConstants.STYLE_VERTICAL_LABEL_POSITION + '=bottom;' + mxConstants.STYLE_VERTICAL_ALIGN + '=top;' + mxConstants.STYLE_STROKEWIDTH + '=2;strokeColor=#000000;');
@@ -807,20 +967,6 @@
 				';html=1;fillColor=#000000;strokeColor=none;verticalLabelPosition=bottom;verticalAlign=top;align=center;');
 		}
 		
-		for (var i = 0; i < gcp.length; i++)
-		{
-			if (gcp[i].toLowerCase() === 'cards')
-			{
-				this.addGoogleCloudPlatformCardsPalette();
-			}
-			else
-			{
-				this.addStencilPalette('gcp' + gcp[i], 'GCP / ' + gcp[i],
-						dir + '/gcp/' + gcp[i].toLowerCase().replace(/ /g, '_') + '.xml',
-						';html=1;outlineConnect=0;fillColor=#4387FD;gradientColor=#4683EA;strokeColor=none;verticalLabelPosition=bottom;verticalAlign=top;align=center;');
-			}
-		}
-
 		for (var i = 0; i < rack.length; i++)
 		{
 			if (rack[i].toLowerCase() === 'general')
