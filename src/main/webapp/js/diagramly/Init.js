@@ -12,12 +12,13 @@ window.isSvgBrowser = window.isSvgBrowser || (navigator.userAgent.indexOf('MSIE'
 
 // CUSTOM_PARAMETERS - URLs for save and export
 window.EXPORT_URL = window.EXPORT_URL || 'https://exp.draw.io/ImageExport4/export';
-window.PLANT_URL = window.PLANT_URL || 'https://exp-plant.draw.io/plantuml3';
+window.PLANT_URL = window.PLANT_URL || 'https://exp-plant.draw.io/plantuml4';
 window.VSD_CONVERT_URL = window.VSD_CONVERT_URL || "https://convert.draw.io/VsdConverter/api/converter";
-//window.EMF_CONVERT_URL = window.EMF_CONVERT_URL || "http://localhost:5000/convertEMF";
+window.EMF_CONVERT_URL = window.EMF_CONVERT_URL || "https://convert.draw.io/emf2png/convertEMF";
 window.SAVE_URL = window.SAVE_URL || 'save';
 window.OPEN_URL = window.OPEN_URL || 'open';
 window.PROXY_URL = window.PROXY_URL || 'proxy';
+window.VIEWER_URL = null;
 
 // Paths and files
 window.SHAPES_PATH = window.SHAPES_PATH || 'shapes';
@@ -110,8 +111,8 @@ window.mxLanguageMap = window.mxLanguageMap ||
 	'th' : 'ไทย',
 	'ko' : '한국어',
 	'ja' : '日本語',
-	'zh' : '中文（中国）',
-	'zh-tw' : '中文（台灣）'
+	'zh' : '简体中文',
+	'zh-tw' : '繁體中文'
 };
 
 if (typeof window.mxBasePath === 'undefined')
@@ -285,4 +286,11 @@ if (urlParams['offline'] == '1' || urlParams['local'] == '1')
 if (urlParams['lightbox'] == '1')
 {
 	urlParams['chrome'] = '0';
+}
+
+// Fallback for cases where the hash property is not available
+if ((window.location.hash == null || window.location.hash.length <= 1) &&
+	urlParams['open'] != null)
+{
+	window.location.hash = urlParams['open'];
 }

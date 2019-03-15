@@ -52,7 +52,7 @@
 		<replaceregexp file="${basedir}/.tmp1.xml" match="'" flags="g" replace="\\\\'" byline="true"/>
 		
 		<delete file="${basedir}/Graph-Stylesheet.js"/>
-		<echo file="${basedir}/Graph-Stylesheet.js">Graph.prototype.defaultThemes[Graph.prototype.defaultThemeName] = mxUtils.parseXml('</echo>
+		<echo file="${basedir}/Graph-Stylesheet.js">Graph.prototype.defaultThemes['default-style2'] = mxUtils.parseXml('</echo>
 		<concat destfile="${basedir}/Graph-Stylesheet.js" fixlastline="no" append="true">
 			<filelist dir="${basedir}" files=".tmp1.xml"/>
     		</concat>
@@ -111,6 +111,8 @@
 				<file name="Sidebar-AWS.js" />
 				<file name="Sidebar-AWS3.js" />
 				<file name="Sidebar-AWS3D.js" />
+				<file name="Sidebar-AWS4.js" />
+				<file name="Sidebar-AWS4b.js" />
 				<file name="Sidebar-Azure.js" />
 				<file name="Sidebar-Basic.js" />
 				<file name="Sidebar-Bootstrap.js" />
@@ -118,6 +120,7 @@
 				<file name="Sidebar-Cabinet.js" />
 				<file name="Sidebar-CiscoSafe.js" />
 				<file name="Sidebar-Citrix.js" />
+				<file name="Sidebar-DFD.js" />
 				<file name="Sidebar-EIP.js" />
 				<file name="Sidebar-Electrical.js" />
 				<file name="Sidebar-ER.js" />
@@ -207,7 +210,7 @@
 			<filelist dir="${war.dir}/js/sanitizer" files="sanitizer.min.js"/>
 			<filelist dir="${war.dir}/js/deflate" files="pako.min.js"/>
 			<filelist dir="${basedir}" files="client.min.js,.tmp1.js"/>
-    		</concat>
+    	</concat>
 
 		<echo file="${basedir}/.tmp2.js">
 			(function()
@@ -252,16 +255,21 @@
 				<file name="LocalLibrary.js" />
 				<file name="StorageFile.js" />
 				<file name="StorageLibrary.js" />
+				<file name="RemoteFile.js" />
+				<file name="RemoteLibrary.js" />
 				<file name="UrlLibrary.js" />
 				<file name="Dialogs.js" />
 				<file name="Editor.js" />
 				<file name="EditorUi.js" />
+				<file name="DiffSync.js" />
 				<file name="Settings.js" />
+				<file name="DrawioFileSync.js" />
 				<file name="App.js" />
 				<file name="Menus.js" />
 				<file name="Pages.js" />
 				<file name="Trees.js" />
 				<file name="Minimal.js" />
+				<file name="DistanceGuides.js" />
 			</sources>
 				
 			<sources dir="${basedir}">
@@ -272,6 +280,7 @@
 		<concat destfile="${basedir}/base.min.js" fixlastline="yes" append="no">
 			<filelist dir="${war.dir}/js/spin" files="spin.min.js"/>
 			<filelist dir="${war.dir}/js/sanitizer" files="sanitizer.min.js"/>
+			<filelist dir="${war.dir}/js/cryptojs" files="aes.min.js"/>
 			<filelist dir="${war.dir}/js/deflate" files="pako.min.js"/>
 			<filelist dir="${basedir}" files="client.min.js,grapheditor.min.js,sidebar.min.js,.tmp1.js"/>
     	</concat>
@@ -289,6 +298,9 @@
 				<file name="bmpDecoder.js" />
 				<file name="importer.js" />
 			</sources>
+			<sources dir="${war.dir}/js/diagramly/graphml">
+				<file name="mxGraphMlCodec.js" />
+			</sources>
 		</jscomp>
 		<concat destfile="${war.dir}/js/extensions.min.js" fixlastline="yes" append="yes">
 	    		<fileset dir="${war.dir}/js/jszip" includes="**/*.min.js"/>
@@ -303,11 +315,15 @@
 				<file name="LocalLibrary.js" />
 				<file name="StorageFile.js" />
 				<file name="StorageLibrary.js" />
+				<file name="RemoteFile.js" />
+				<file name="RemoteLibrary.js" />
 				<file name="UrlLibrary.js" />
 				<file name="Dialogs.js" />
 				<file name="Editor.js" />
 				<file name="EditorUi.js" />
+				<file name="DiffSync.js" />
 				<file name="Settings.js" />
+				<file name="DrawioFileSync.js" />
 			</sources>
 				
 			<sources dir="${basedir}">
@@ -322,8 +338,6 @@
 			<sources dir="${war.dir}/js/diagramly">
 				<file name="DrawioClient.js" />
 				<file name="DrawioUser.js" />
-				<file name="DriveRealtime.js" />
-				<file name="RealtimeMapping.js" />
 				<file name="DriveFile.js" />
 				<file name="DriveLibrary.js" />
 				<file name="DriveClient.js" />
@@ -339,7 +353,6 @@
 				<file name="TrelloFile.js" />
 				<file name="TrelloLibrary.js" />
 				<file name="TrelloClient.js" />
-				<file name="ChatWindow.js" />
 			</sources>
 			
 			<sources dir="${war.dir}/js/diagramly">
@@ -348,15 +361,17 @@
 				<file name="Pages.js" />
 				<file name="Trees.js" />
 				<file name="Minimal.js" />
+				<file name="DistanceGuides.js" />
 			</sources>
 		</jscomp>
 
 		<concat destfile="${war.dir}/js/app.min.js" fixlastline="yes" append="no">
 			<filelist dir="${war.dir}/js/spin" files="spin.min.js"/>
 			<filelist dir="${war.dir}/js/sanitizer" files="sanitizer.min.js"/>
+			<filelist dir="${war.dir}/js/cryptojs" files="aes.min.js"/>
 			<filelist dir="${war.dir}/js/deflate" files="pako.min.js"/>
 			<filelist dir="${basedir}" files="client.min.js,grapheditor.min.js,sidebar.min.js,.tmp1.js"/>
-    		</concat>
+    	</concat>
 
 		<replace file="${war.dir}/js/app.min.js" token="@DRAWIO-VERSION@" value="${version}"/>
 
