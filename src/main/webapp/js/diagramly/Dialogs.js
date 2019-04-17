@@ -763,132 +763,6 @@ var SplashDialog = function(editorUi)
 };
 
 /**
- * 
- */
-var ConfirmDialog = function(editorUi, message, okFn, cancelFn, okLabel, cancelLabel, okImg, cancelImg, showRememberOption, imgSrc)
-{
-	var div = document.createElement('div');
-	div.style.textAlign = 'center';
-	
-	var p2 = document.createElement('div');
-	p2.style.padding = '6px';
-	p2.style.overflow = 'auto';
-	p2.style.maxHeight = '44px';
-	p2.style.lineHeight = '1.2em';
-	
-	if (mxClient.IS_QUIRKS)
-	{
-		p2.style.height = '60px';
-	}
-	
-	mxUtils.write(p2, message);
-	div.appendChild(p2);
-	
-	if (imgSrc != null)
-	{
-		var p3 = document.createElement('div');
-		p3.style.padding = '6px 0 6px 0';
-		var img = document.createElement('img');
-		img.setAttribute('src', imgSrc);
-		p3.appendChild(img);
-		div.appendChild(p3);
-	}
-	
-	var btns = document.createElement('div');
-	btns.style.textAlign = 'center';
-	btns.style.whiteSpace = 'nowrap';
-
-	var cb = document.createElement('input');
-	cb.setAttribute('type', 'checkbox');
-
-	var cancelBtn = mxUtils.button(cancelLabel || mxResources.get('cancel'), function()
-	{
-		editorUi.hideDialog();
-		
-		if (cancelFn != null)
-		{
-			cancelFn(cb.checked);
-		}
-	});
-	cancelBtn.className = 'geBtn';
-	
-	if (cancelImg != null)
-	{
-		cancelBtn.innerHTML = cancelImg + '<br>' + cancelBtn.innerHTML;
-		cancelBtn.style.paddingBottom = '8px';
-		cancelBtn.style.paddingTop = '8px';
-		cancelBtn.style.height = 'auto';
-		cancelBtn.style.width = '40%';
-	}
-	
-	if (editorUi.editor.cancelFirst)
-	{
-		btns.appendChild(cancelBtn);
-	}
-	
-	var okBtn = mxUtils.button(okLabel || mxResources.get('ok'), function()
-	{
-		editorUi.hideDialog();
-		
-		if (okFn != null)
-		{
-			okFn(cb.checked);
-		}
-	});
-	btns.appendChild(okBtn);
-	
-	if (okImg != null)
-	{
-		okBtn.innerHTML = okImg + '<br>' + okBtn.innerHTML + '<br>';
-		okBtn.style.paddingBottom = '8px';
-		okBtn.style.paddingTop = '8px';
-		okBtn.style.height = 'auto';
-		okBtn.className = 'geBtn';
-		okBtn.style.width = '40%';
-	}
-	else
-	{
-		okBtn.className = 'geBtn gePrimaryBtn';
-	}
-	
-	if (!editorUi.editor.cancelFirst)
-	{
-		btns.appendChild(cancelBtn);
-	}
-
-	div.appendChild(btns);
-	
-	if (showRememberOption)
-	{
-		btns.style.marginTop = '10px';
-		var p2 = document.createElement('p');
-		p2.style.marginTop = '20px';
-		p2.appendChild(cb);
-		var span = document.createElement('span');
-		mxUtils.write(span, ' ' + mxResources.get('rememberThisSetting'));
-		p2.appendChild(span);
-		div.appendChild(p2);
-		
-		mxEvent.addListener(span, 'click', function(evt)
-		{
-			cb.checked = !cb.checked;
-			mxEvent.consume(evt);
-		});
-	}
-	else
-	{
-		btns.style.marginTop = '12px';
-	}
-
-	this.init = function()
-	{
-		okBtn.focus();
-	};
-	
-	this.container = div;
-};
-
-/**
  * Constructs a new embed dialog
  */
 var EmbedDialog = function(editorUi, result, timeout, ignoreSize, previewFn, title)
@@ -2689,7 +2563,7 @@ var ParseDialog = function(editorUi, title, defaultType)
  */
 var NewDialog = function(editorUi, compact, showName, callback, createOnly, cancelCallback,
 		leftHighlight, rightHighlight, rightHighlightBorder, itemPadding, templateFile,
-		recentDocsCallback, searchDocsCallback, openExtDocCallback, showImport, createButtonLabel)
+		recentDocsCallback, searchDocsCallback, openExtDocCallback, showImport, createButtonLabel, customTempCallback)
 {
 	showName = (showName != null) ? showName : true;
 	createOnly = (createOnly != null) ? createOnly : false;
@@ -2758,7 +2632,7 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 				editorUi.mode == App.MODE_BROWSER) ? mxResources.get('diagramName') : mxResources.get('filename')) + ':');
 	}
 	
-	var ext = '.xml';
+	var ext = '.drawio';
 	
 	if (editorUi.mode == App.MODE_GOOGLE && editorUi.drive != null)
 	{
@@ -2832,10 +2706,10 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 			{
 				var tmp = templates[i0++];
 				addButton(tmp.url, tmp.libs, tmp.title, tmp.tooltip? tmp.tooltip : tmp.title,
-					tmp.select, tmp.imgUrl, tmp.info, tmp.onClick, tmp.preview);
+					tmp.select, tmp.imgUrl, tmp.info, tmp.onClick, tmp.preview, tmp.noImg);
 				first = false;
 			}
-		}
+		}		
 	};
 	
 	var spinner = new Spinner({
@@ -2865,7 +2739,7 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 	if (recentDocsCallback || searchDocsCallback)
 	{
 		var tabsEl = [];
-		var oldTemplates = null;
+		var oldTemplates = null, origCategories = null, origCustomCatCount = null;
 		
 		var setActiveTab = function(index)
 		{
@@ -2899,7 +2773,10 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 			if (oldTemplates != templates)
 			{
 				templates = oldTemplates;
-				addTemplates();	
+				categories = origCategories;
+				customCatCount = origCustomCatCount;
+				list.innerHTML = '';
+				initUi();	
 				oldTemplates = null;
 			}
 		});
@@ -2910,7 +2787,7 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 		var getExtTemplates = function(isSearch)
 		{
 			list.style.display = 'none';
-			div.style.left = '30px';
+			div.style.left = '30px';				
 			
 			setActiveTab(isSearch? -1 : 1); //deselect all of them if isSearch 
 			
@@ -2922,25 +2799,52 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 			div.scrollTop = 0;
 			div.innerHTML = '';
 			spinner.spin(div);
-			i0 = 0;
 
-			var callback2 = function(list, errorMsg) 
+			var callback2 = function(docList, errorMsg, searchImportCats) 
 			{
+				i0 = 0;
 				spinner.stop();
-				templates = list;
+				templates = docList;
+				searchImportCats = searchImportCats || {};
+				var importListsCount = 0;
+				
+				for (var cat in searchImportCats)
+				{
+					importListsCount += searchImportCats[cat].length;
+				}
 				
 				if (errorMsg)
 				{
 					div.innerHTML = errorMsg;
 				}
-				else if (list.length == 0)
+				else if (docList.length == 0 && importListsCount == 0)
 				{
 					div.innerHTML = mxUtils.htmlEntities(mxResources.get('noDiagrams', null, 'No Diagrams Found'));
 				}
 				else
 				{
 					div.innerHTML = '';
-					addTemplates();
+					
+					if (importListsCount > 0)
+					{
+						list.style.display = '';
+						div.style.left = '160px';
+						list.innerHTML = '';
+
+						customCatCount = 0;
+						categories = {'draw.io': docList};
+						
+						for (var cat in searchImportCats)
+						{	
+							categories[cat] = searchImportCats[cat];
+						}
+						
+						initUi();
+					}
+					else
+					{
+						addTemplates();
+					}
 				}
 			}
 			
@@ -3085,7 +2989,7 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 		selectedElt.style.border = rightHighlightBorder;
 	};
 
-	function addButton(url, libs, title, tooltip, select, imgUrl, infoObj, onClick, preview)
+	function addButton(url, libs, title, tooltip, select, imgUrl, infoObj, onClick, preview, noImg)
 	{
 		var elt = document.createElement('div');
 		elt.className = 'geTemplate';
@@ -3115,7 +3019,7 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 			});
 
 		}
-		else if (url != null && url.length > 0)
+		else if (!noImg && url != null && url.length > 0)
 		{
 			var png = preview || (TEMPLATE_PATH + '/' + url.substring(0, url.length - 4) + '.png');
 			
@@ -3167,8 +3071,8 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 		}
 		else
 		{
-			elt.innerHTML = '<table width="100%" height="100%" style="line-height:1em;"><tr>' +
-				'<td align="center" valign="middle">' + mxResources.get(title) + '</td></tr></table>';
+			elt.innerHTML = '<table width="100%" height="100%" style="line-height:1em;word-break: break-all;"><tr>' +
+				'<td align="center" valign="middle">' + mxResources.get(title, null, title) + '</td></tr></table>';
 			
 			if (select)
 			{
@@ -3183,7 +3087,7 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 			{
 				mxEvent.addListener(elt, 'click', function(evt)
 				{
-					selectElement(elt);
+					selectElement(elt, null, null, url, infoObj);
 				});
 				
 				mxEvent.addListener(elt, 'dblclick', function(evt)
@@ -3196,8 +3100,8 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 		div.appendChild(elt);
 	};
 
-	var categories = {};
-	var categoryCount = 1;
+	var categories = {}, customCats = {};
+	var customCatCount = 0, firstInitUi = true;
 	
 	// Adds local basic templates
 	categories['basic'] = [{title: 'blankDiagram', select: true}];
@@ -3206,16 +3110,79 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 	
 	function initUi()
 	{
-		mxEvent.addListener(div, 'scroll', function(evt)
+		if (firstInitUi)
 		{
-			if (div.scrollTop + div.clientHeight >= div.scrollHeight)
+			firstInitUi = false;
+			
+			mxEvent.addListener(div, 'scroll', function(evt)
 			{
-				addTemplates();
-				mxEvent.consume(evt);
-			}
-		});
+				if (div.scrollTop + div.clientHeight >= div.scrollHeight)
+				{
+					addTemplates();
+					mxEvent.consume(evt);
+				}
+			});
+		}
 		
 		var currentEntry = null;
+		
+		if (customCatCount > 0)
+		{
+			var titleCss = 'font-weight: bold;background: #f9f9f9;padding: 5px 0 5px 0;text-align: center;';
+			var title = document.createElement('div');
+			title.style.cssText = titleCss;
+			mxUtils.write(title, mxResources.get('custom'));
+			list.appendChild(title);
+			
+			for (var cat in customCats)
+			{
+				var entry = document.createElement('div');
+				var label = cat;
+				var templateList = customCats[cat];
+				
+				if (label.length > 18)
+				{
+					label = label.substring(0, 18) + '&hellip;';
+				}
+				
+				entry.style.cssText = 'display:block;cursor:pointer;padding:6px;white-space:nowrap;margin-bottom:-1px;overflow:hidden;text-overflow:ellipsis;';
+				entry.setAttribute('title', label + ' (' + templateList.length + ')');
+				mxUtils.write(entry, entry.getAttribute('title'));
+				
+				if (itemPadding != null)
+				{
+					entry.style.padding = itemPadding;
+				}
+
+				list.appendChild(entry);
+				
+				(function(cat2, entry2)
+				{
+					mxEvent.addListener(entry, 'click', function()
+					{
+						if (currentEntry != entry2)
+						{
+							currentEntry.style.backgroundColor = '';
+							currentEntry = entry2;
+							currentEntry.style.backgroundColor = leftHighlight;
+							
+							div.scrollTop = 0;
+							div.innerHTML = '';
+							i0 = 0;
+							
+							templates = customCats[cat2];
+							oldTemplates = null;
+							addTemplates();
+						}
+					});
+				})(cat, entry);
+			}
+			
+			title = document.createElement('div');
+			title.style.cssText = titleCss;
+			mxUtils.write(title, 'draw.io');
+			list.appendChild(title);
+		}
 		
 		for (var cat in categories)
 		{
@@ -3244,10 +3211,11 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 
 			list.appendChild(entry);
 			
-			if (currentEntry == null)
+			if (currentEntry == null && templateList.length > 0)
 			{
 				currentEntry = entry;
 				currentEntry.style.backgroundColor = leftHighlight;
+				templates = templateList;
 			}
 			
 			(function(cat2, entry2)
@@ -3287,52 +3255,78 @@ var NewDialog = function(editorUi, compact, showName, callback, createOnly, canc
 			realUrl = PROXY_URL + '?url=' + encodeURIComponent(realUrl);
 		}
 		
-		mxUtils.get(realUrl, function(req)
+		function loadDrawioTemplates()
 		{
-			// Workaround for index loaded 3 times in iOS offline mode
-			if (!indexLoaded)
+			mxUtils.get(realUrl, function(req)
 			{
-				indexLoaded = true;
-				var tmpDoc = req.getXml();
-				var node = tmpDoc.documentElement.firstChild;
-	
-				while (node != null)
+				// Workaround for index loaded 3 times in iOS offline mode
+				if (!indexLoaded)
 				{
-					if (typeof(node.getAttribute) !== 'undefined')
+					indexLoaded = true;
+					var tmpDoc = req.getXml();
+					var node = tmpDoc.documentElement.firstChild;
+		
+					while (node != null)
 					{
-						var url = node.getAttribute('url');
-						
-						if (url != null)
+						if (typeof(node.getAttribute) !== 'undefined')
 						{
-							var category = node.getAttribute('section');
+							var url = node.getAttribute('url');
 							
-							if (category == null)
+							if (url != null)
 							{
-								var slash = url.indexOf('/');
-								category = url.substring(0, slash);
+								var category = node.getAttribute('section');
+								
+								if (category == null)
+								{
+									var slash = url.indexOf('/');
+									category = url.substring(0, slash);
+								}
+								
+								var list = categories[category];
+								
+								if (list == null)
+								{
+									list = [];
+									categories[category] = list;
+								}
+								
+								list.push({url: node.getAttribute('url'), libs: node.getAttribute('libs'),
+									title: node.getAttribute('title'), tooltip: node.getAttribute('url'),
+									preview: node.getAttribute('preview')});
 							}
-							
-							var list = categories[category];
-							
-							if (list == null)
-							{
-								categoryCount++;
-								list = [];
-								categories[category] = list;
-							}
-							
-							list.push({url: node.getAttribute('url'), libs: node.getAttribute('libs'),
-								title: node.getAttribute('title'), tooltip: node.getAttribute('url'),
-								preview: node.getAttribute('preview')});
 						}
+						
+						node = node.nextSibling;
 					}
 					
-					node = node.nextSibling;
+					spinner.stop();
+					initUi();
 				}
-				
-				initUi();
-			}
-		});
+			});
+		};
+		
+		spinner.spin(div);
+		
+		if (customTempCallback != null)
+		{
+			customTempCallback(function(cats, count)
+			{
+				customCats = cats;
+				customCatCount = count;
+				//Custom templates doesn't change after being loaded, so cache them here. Also, only count is overridden
+				origCustomCatCount = count;
+
+				loadDrawioTemplates();
+			}, 
+			loadDrawioTemplates); //In case of an error, just load draw.io templates only
+		}
+		else
+		{
+			loadDrawioTemplates();
+		}
+		
+		//draw.io templates doesn't change after being loaded, so cache them here
+		origCategories = categories;
 	}
 	
 	mxEvent.addListener(nameInput, 'keypress', function(e)
@@ -3790,7 +3784,7 @@ var CreateDialog = function(editorUi, title, createFn, cancelFn, dlgTitle, btnLa
 				}
 				else if (newMode == App.MODE_DEVICE)
 				{
-					ext = '.xml';
+					ext = '.drawio';
 				}
 				
 				if (idx >= 0)
@@ -5050,7 +5044,7 @@ var FeedbackDialog = function(editorUi)
 	textarea.style.height = '140px';
 	textarea.style.marginTop = '6px';
 	
-	textarea.setAttribute('placeholder', mxResources.get('commentsNotes'));
+	textarea.setAttribute('placeholder', mxResources.get('comments'));
 	
 	div.appendChild(textarea);
 
@@ -5271,7 +5265,7 @@ var RevisionDialog = function(editorUi, revs, restoreFn)
 		if (currentDoc != null)
 		{
     		var data = mxUtils.getXml(currentDoc.documentElement);
-			var filename = editorUi.getBaseFilename() + '.xml';
+			var filename = editorUi.getBaseFilename() + '.drawio';
     		
 	    	if (editorUi.isLocalFileSave())
 	    	{
@@ -6271,6 +6265,8 @@ var FindWindow = function(ui, x, y, w, h)
 	
 	this.window.addListener('show', mxUtils.bind(this, function()
 	{
+		this.window.fit();
+		
 		if (this.window.isVisible())
 		{
 			searchInput.focus();
@@ -6289,6 +6285,36 @@ var FindWindow = function(ui, x, y, w, h)
 			graph.container.focus();
 		}
 	}));
+	
+	this.window.setLocation = function(x, y)
+	{
+		var iw = window.innerWidth || document.body.clientWidth || document.documentElement.clientWidth;
+		var ih = window.innerHeight || document.body.clientHeight || document.documentElement.clientHeight;
+		
+		x = Math.max(0, Math.min(x, iw - this.table.clientWidth));
+		y = Math.max(0, Math.min(y, ih - this.table.clientHeight - 48));
+
+		if (this.getX() != x || this.getY() != y)
+		{
+			mxWindow.prototype.setLocation.apply(this, arguments);
+		}
+	};
+	
+	var resizeListener = mxUtils.bind(this, function()
+	{
+		var x = this.window.getX();
+		var y = this.window.getY();
+		
+		this.window.setLocation(x, y);
+	});
+	
+	mxEvent.addListener(window, 'resize', resizeListener);
+
+	this.destroy = function()
+	{
+		mxEvent.removeListener(window, 'resize', resizeListener);
+		this.window.destroy();
+	}
 };
 
 /**
@@ -6418,6 +6444,8 @@ var TagsWindow = function(editorUi, x, y, w, h)
 	
 	this.window.addListener('show', mxUtils.bind(this, function()
 	{
+		this.window.fit();
+		
 		if (this.window.isVisible())
 		{
 			searchInput.focus();
@@ -6436,6 +6464,36 @@ var TagsWindow = function(editorUi, x, y, w, h)
 			graph.container.focus();
 		}
 	}));
+	
+	this.window.setLocation = function(x, y)
+	{
+		var iw = window.innerWidth || document.body.clientWidth || document.documentElement.clientWidth;
+		var ih = window.innerHeight || document.body.clientHeight || document.documentElement.clientHeight;
+		
+		x = Math.max(0, Math.min(x, iw - this.table.clientWidth));
+		y = Math.max(0, Math.min(y, ih - this.table.clientHeight - 48));
+
+		if (this.getX() != x || this.getY() != y)
+		{
+			mxWindow.prototype.setLocation.apply(this, arguments);
+		}
+	};
+	
+	var resizeListener = mxUtils.bind(this, function()
+	{
+		var x = this.window.getX();
+		var y = this.window.getY();
+		
+		this.window.setLocation(x, y);
+	});
+	
+	mxEvent.addListener(window, 'resize', resizeListener);
+
+	this.destroy = function()
+	{
+		mxEvent.removeListener(window, 'resize', resizeListener);
+		this.window.destroy();
+	}
 };
 
 /**
@@ -7032,7 +7090,7 @@ var PluginsDialog = function(editorUi)
 				{
 					return function()
 					{
-						editorUi.confirm(window.parent.mxResources.get('delete') + ' "' + plugins[index] + '"?', function()
+						editorUi.confirm(mxResources.get('delete') + ' "' + plugins[index] + '"?', function()
 						{
 							plugins.splice(index, 1);
 							refresh();
@@ -8276,23 +8334,23 @@ var LibraryDialog = function(editorUi, name, library, initialImages, file, mode)
 
 	var btn = mxUtils.button(mxResources.get('export'), function()
 	{
-	    	var data = editorUi.createLibraryDataFromImages(images);
-	    	var filename = nameInput.value;
+    	var data = editorUi.createLibraryDataFromImages(images);
+    	var filename = nameInput.value;
 	    	
 		if (!/(\.xml)$/i.test(filename))
 		{
 			filename += '.xml';
 		}
 	    	
-	    	if (editorUi.isLocalFileSave())
-	    	{
-	    		editorUi.saveLocalFile(data, filename, 'text/xml', null, null, true);
-	    	}
-	    	else
-	    	{
-	    		new mxXmlRequest(SAVE_URL, 'filename=' + encodeURIComponent(filename) +
-	    			'&format=xml&xml=' + encodeURIComponent(data)).simulate(document, '_blank');
-	    	}
+    	if (editorUi.isLocalFileSave())
+    	{
+    		editorUi.saveLocalFile(data, filename, 'text/xml', null, null, true);
+    	}
+    	else
+    	{
+    		new mxXmlRequest(SAVE_URL, 'filename=' + encodeURIComponent(filename) +
+    			'&format=xml&xml=' + encodeURIComponent(data)).simulate(document, '_blank');
+    	}
 	});
 	
 	btn.setAttribute('id', 'btnDownload');

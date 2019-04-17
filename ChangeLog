@@ -1,3 +1,94 @@
+16-APR-2019: 10.6.3
+
+- Fixes handling of Infinity in geometries and points
+- Uses mxGraph 4.0.1 beta 7
+
+15-APR-2019: 10.6.2
+
+- Adds generic layout menu item
+
+10-APR-2019: 10.6.1
+
+- Fixes issues with CSV import
+- Adds pointerEvents style for stencils and AWS groups
+- Uses new language locale API in Confluence cloud
+- Uses mxGraph 4.0.1 beta 6
+
+01-APR-2019: 10.6.0
+
+- Adds configuration section for Confluence for cloud
+- Free GDrive/OneDrive connector for Confluence cloud
+- Adds show with draw.io option in OneDrive connector
+- Improves handling of files with no extensions in GDrive connector
+
+27-MAR-2019: 10.5.9
+
+- Change to connection points and arrows trigger autosave
+- Adds style options for edge labels in Arrange panel
+- Fixes scroll during Alt+mouse wheel in Chrome
+- Uses mxGraph 4.0.1 beta 5
+
+26-MAR-2019: 10.5.8
+
+- Hides icon in Confluence cloud for resolved comments
+- Uses mxGraph 4.0.1 beta 4
+
+26-MAR-2019: 10.5.7
+
+- Adds comments in Confluence cloud viewer
+- Improves Google file not found dialog
+
+25-MAR-2019: 10.5.6
+
+- Adds file ID and mime type in GDriveConnector macro editor
+- Removes convert warning, cache alive check in lightbox
+- Improves handling of redirects and invalid responses
+- Removes connection arrows for edge labels
+
+25-MAR-2019: 10.5.5
+
+- Improvements for Gliffy import
+- Uses mxGraph 4.0.1 beta 3
+
+22-MAR-2019: 10.5.4
+
+- Adds custom libraries for Confluence cloud
+
+21-MAR-2019: 10.5.3
+
+- Fixes timing issue in graph viewer
+- Fixes date formats in VSDX import
+- Fixes possible cropping for PDF export
+
+20-MAR-2019: 10.5.2
+
+- Fixes bug for comments in Confluence cloud
+
+19-MAR-2019: 10.5.1
+
+- Adds comments for Confluence cloud
+
+18-MAR-2019: 10.5.0
+
+- Uses .drawio extension in desktop app
+- Removes spacers for rack layouts
+- Uses mxGraph 4.0.1 beta 2
+
+17-MAR-2019: 10.4.9
+
+- Adds comments for Google Drive (beta)
+
+15-MAR-2019: 10.4.8
+
+- Adds autosaveDelay and defaultEdgeLength to drawio-config
+
+15-MAR-2019: 10.4.7
+
+- Realtime warning can be permanently closed
+- Ignores read-only files in auto conversion
+- Adds new issue viewer for Jira cloud
+- Fixes Atlas theme in Safari
+
 14-MAR-2019: 10.4.6
 
 - Adds warning dialog for failed autosave after 10 minutes

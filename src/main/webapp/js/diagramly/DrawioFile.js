@@ -477,7 +477,7 @@ DrawioFile.prototype.checksumError = function(error, patches, details, etag, fun
 					this.ui.getPagesForNode(
 					mxUtils.parseXml(file.data).documentElement)), 25000) : 'n/a';
 				
-				this.sendErrorReport('Checksum Error in ' + functionName + ' ' + this.getId(),
+				this.sendErrorReport('Checksum Error in ' + functionName + ' ' + this.getHash(),
 					((details != null) ? (details) : '') +  '\n\nPatches:\n' + json +
 					((remote != null) ? ('\n\nRemote:\n' + remote) : ''), null, 70000);
 			});
@@ -507,13 +507,15 @@ DrawioFile.prototype.checksumError = function(error, patches, details, etag, fun
 			var uid = (user != null) ? user.id : 'unknown';
 			
 			EditorUi.logError('Checksum Error in ' + functionName + ' ' + this.getId(),
-				null, this.getMode() + '.' + this.getId(), uid);
+				null, this.getMode() + '.' + this.getId(), uid + '.' +
+				((this.sync != null) ? this.sync.clientId : 'nosync'));
 			
 			// Logs checksum error for file
 			try
 			{
 				EditorUi.logEvent({category: 'CHECKSUM-ERROR-SYNC-FILE-' + this.getHash(),
-					action: functionName, label: uid});
+					action: functionName, label:  uid + '.' +
+					((this.sync != null) ? this.sync.clientId : 'nosync')});
 			}
 			catch (e)
 			{
@@ -1234,6 +1236,8 @@ DrawioFile.prototype.installListeners = function()
 		this.ui.addListener('gridEnabledChanged', this.changeListener);
 		this.ui.addListener('guidesEnabledChanged', this.changeListener);
 		this.ui.addListener('pageViewChanged', this.changeListener);
+		this.ui.addListener('connectionPointsChanged', this.changeListener);
+		this.ui.addListener('connectionArrowsChanged', this.changeListener);
 	}
 };
 
@@ -1629,13 +1633,15 @@ DrawioFile.prototype.handleFileError = function(err, manual)
 						{
 							this.lastWarned = Date.now();
 							this.ui.hideDialog();
-							EditorUi.logEvent({category: 'IGNORE-WARN-SAVE-FILE-' + this.getHash(), action: 'ignore'});
+							EditorUi.logEvent({category: 'IGNORE-WARN-SAVE-FILE-' + this.getHash() +
+								'-size-' + this.getSize(), action: 'ignore'});
 						}), null, mxResources.get('save'), mxUtils.bind(this, function()
 						{
 							this.lastWarned = Date.now();
 							this.ui.actions.get((this.ui.mode == null || !this.isEditable()) ?
 								'saveAs' : 'save').funct();
-							EditorUi.logEvent({category: 'SAVE-WARN-SAVE-FILE-' + this.getHash(), action: 'save'});
+							EditorUi.logEvent({category: 'SAVE-WARN-SAVE-FILE-' + this.getHash() +
+								'-size-' + this.getSize(), action: 'save'});
 						}), null, null, 360, 120);
 				}
 			}
@@ -2021,4 +2027,68 @@ DrawioFile.prototype.destroy = function()
 		this.sync.destroy();
 		this.sync = null;
 	}
+};
+
+/**
+ * Are comments supported
+ */
+DrawioFile.prototype.commentsSupported = function()
+{
+	return false; //The default is false and files that support it must explicitly state that
+};
+
+/**
+ * Show refresh button?
+ */
+DrawioFile.prototype.commentsRefreshNeeded = function()
+{
+	return true;
+};
+
+/**
+ * Show save button?
+ */
+DrawioFile.prototype.commentsSaveNeeded = function()
+{
+	return false;
+};
+
+/**
+ * Get comments of the file
+ */
+DrawioFile.prototype.getComments = function(success, error)
+{
+	success([]); //placeholder
+};
+
+/**
+ * Add a comment to the file
+ */
+DrawioFile.prototype.addComment = function(comment, success, error)
+{
+	success(Date.now()); //placeholder
+};
+
+/**
+ * Can add a reply to a reply
+ */
+DrawioFile.prototype.canReplyToReplies = function()
+{
+	return true;
+};
+
+/**
+ * Can add comments (The permission to comment to this file)
+ */
+DrawioFile.prototype.canComment = function()
+{
+	return true;
+};
+
+/**
+ * Get a new comment object
+ */
+DrawioFile.prototype.newComment = function(content, user)
+{
+	return new DrawioComment(this, null, content, Date.now(), Date.now(), false, user);
 };

@@ -688,6 +688,11 @@ Graph = function(container, model, renderHint, stylesheet, themes)
 						}
 					}
 				}
+				
+				if (this.isEnabled() && locked)
+				{
+					this.clearSelection();
+				}
 			}
 			else
 			{
@@ -1728,8 +1733,8 @@ Graph.prototype.initLayoutManager = function()
 
 	this.layoutManager.getLayout = function(cell)
 	{
-		var state = this.graph.view.getState(cell);
-		var style = (state != null) ? state.style : this.graph.getCellStyle(cell);
+		// Workaround for possible invalid style after change and before view validation
+		var style = this.graph.getCellStyle(cell);
 		
 		if (style != null)
 		{
@@ -1784,10 +1789,10 @@ Graph.prototype.initLayoutManager = function()
 		return null;
 	};
 };
-	
-	/**
-	 * Returns the size of the page format scaled with the page size.
-	 */
+
+/**
+ * Returns the size of the page format scaled with the page size.
+ */
 Graph.prototype.getPageSize = function()
 {
 	return (this.pageVisible) ? new mxRectangle(0, 0, this.pageFormat.width * this.pageScale,
@@ -2280,6 +2285,12 @@ Graph.prototype.selectCellsForConnectVertex = function(cells, evt, hoverIcons)
  */
 Graph.prototype.connectVertex = function(source, direction, length, evt, forceClone, ignoreCellAt)
 {
+	// Ignores relative edge labels
+	if (source.geometry.relative && this.model.isEdge(source.parent))
+	{
+		return [];
+	}
+	
 	ignoreCellAt = (ignoreCellAt) ? ignoreCellAt : false;
 	
 	var pt = (source.geometry.relative && source.parent.geometry != null) ?
@@ -3909,6 +3920,12 @@ HoverIcons.prototype.update = function(state, x, y)
 	}
 	else
 	{
+		if (state != null && state.cell.geometry != null && state.cell.geometry.relative &&
+			this.graph.model.isEdge(state.cell.parent))
+		{
+			state = null;
+		}
+		
 		var timeOnTarget = null;
 		
 		// Time on target
@@ -4146,7 +4163,11 @@ HoverIcons.prototype.setCurrentState = function(state)
 								var pt = mxUtils.intersection(p0.x, p0.y, p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
 	
 								// Handles intersection between two segments
-								if (pt != null && (Math.abs(pt.x - p2.x) > thresh ||
+								if (pt != null && (Math.abs(pt.x - p0.x) > thresh ||
+									Math.abs(pt.y - p0.y) > thresh) &&
+									(Math.abs(pt.x - p1.x) > thresh ||
+									Math.abs(pt.y - p1.y) > thresh) &&
+									(Math.abs(pt.x - p2.x) > thresh ||
 									Math.abs(pt.y - p2.y) > thresh) &&
 									(Math.abs(pt.x - p3.x) > thresh ||
 									Math.abs(pt.y - p3.y) > thresh))
@@ -4260,8 +4281,16 @@ HoverIcons.prototype.setCurrentState = function(state)
 					{
 						n = new mxPoint(pt.x - last.x, pt.y - last.y);
 						len = Math.sqrt(n.x * n.x + n.y * n.y);
-						n.x = n.x * size / len;
-						n.y = n.y * size / len;
+						
+						if (len > 0)
+						{
+							n.x = n.x * size / len;
+							n.y = n.y * size / len;
+						}
+						else
+						{
+							n = null;
+						}
 					}
 					
 					if (dist > size * size && len > 0)
@@ -5056,12 +5085,13 @@ if (typeof mxVertexHandler != 'undefined')
 					
 					return result;
 				}
-				else if (terminal.shape != null)
+				else if (terminal.shape != null && terminal.shape.bounds != null)
 				{
 					var dir = terminal.shape.direction;
 					var bounds = terminal.shape.bounds;
 					var scale = terminal.shape.scale;
-					var w = bounds.width / scale, h = bounds.height / scale;
+					var w = bounds.width / scale;
+					var h = bounds.height / scale;
 					
 					if (dir == mxConstants.DIRECTION_NORTH || dir == mxConstants.DIRECTION_SOUTH)
 					{
@@ -5669,23 +5699,16 @@ if (typeof mxVertexHandler != 'undefined')
 					var state = (this.model.isEdge(cell)) ? this.view.getState(cell) : null;
 					var src = mxEvent.getSource(evt);
 					
-					if (this.firstClickState == state && this.firstClickSource == src)
+					if ((this.firstClickState == state && this.firstClickSource == src) &&
+						(state == null || (state.text == null || state.text.node == null ||
+						state.text.boundingBox == null || (!mxUtils.contains(state.text.boundingBox,
+						pt.x, pt.y) && !mxUtils.isAncestorNode(state.text.node, mxEvent.getSource(evt))))) &&
+						((state == null && !this.isCellLocked(this.getDefaultParent())) ||
+						(state != null && !this.isCellLocked(state.cell))) &&
+						(state != null || (mxClient.IS_VML && src == this.view.getCanvas()) ||
+						(mxClient.IS_SVG && src == this.view.getCanvas().ownerSVGElement)))
 					{
-						if (state == null || (state.text == null || state.text.node == null ||
-							(!mxUtils.contains(state.text.boundingBox, pt.x, pt.y) &&
-							!mxUtils.isAncestorNode(state.text.node, mxEvent.getSource(evt)))))
-						{
-							if ((state == null && !this.isCellLocked(this.getDefaultParent())) ||
-								(state != null && !this.isCellLocked(state.cell)))
-							{
-								// Avoids accidental inserts on background
-								if (state != null || (mxClient.IS_VML && src == this.view.getCanvas()) ||
-									(mxClient.IS_SVG && src == this.view.getCanvas().ownerSVGElement))
-								{
-									cell = this.addText(pt.x, pt.y, state);
-								}
-							}
-						}
+						cell = this.addText(pt.x, pt.y, state);
 					}
 				}
 			

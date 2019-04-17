@@ -946,8 +946,13 @@ DrawioFileSync.prototype.merge = function(patches, checksum, desc, success, erro
 				// Logs successull patch
 				try
 				{
+					var user = this.file.getCurrentUser();
+					var uid = (user != null) ? user.id : 'unknown';
+
 					EditorUi.logEvent({category: 'PATCH-SYNC-FILE-' + this.file.getHash(),
-						action: 'DrawioFileSync.merge', label: this.clientId});
+						action: uid + '-patches-' + patches.length + '-recvd-' +
+						this.file.stats.bytesReceived + '-msgs-' + this.file.stats.msgReceived,
+						label: this.clientId});
 				}
 				catch (e)
 				{
@@ -1115,8 +1120,13 @@ DrawioFileSync.prototype.fileSaved = function(pages, lastDesc, success, error)
 			// Logs successull diff
 			try
 			{
+				var user = this.file.getCurrentUser();
+				var uid = (user != null) ? user.id : 'unknown';
+				
 				EditorUi.logEvent({category: 'DIFF-SYNC-FILE-' + this.file.getHash(),
-					action: 'DrawioFileSync.fileSaved', label: this.clientId});
+					action: uid + '-diff-' + data.length + '-sent-' +
+					this.file.stats.bytesSent + '-msgs-' +
+					this.file.stats.msgSent, label: this.clientId});
 			}
 			catch (e)
 			{

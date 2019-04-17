@@ -813,6 +813,76 @@
 			};
 		}
 		
+		editorUi.customLayoutConfig = [{'layout': 'mxHierarchicalLayout',
+			'config':
+			{'orientation': 'west',
+			'intraCellSpacing': 30,
+			'interRankCellSpacing': 100,
+			'interHierarchySpacing': 60,
+			'parallelEdgeSpacing': 10}}];
+		
+		// Adds action
+		editorUi.actions.addAction('runLayout', function()
+		{
+			var graph = editorUi.editor.graph;
+			
+	    	var dlg = new TextareaDialog(editorUi, 'Run Layouts:',
+	    		JSON.stringify(editorUi.customLayoutConfig, null, 2),
+	    		function(newValue)
+			{
+				if (newValue.length > 0)
+				{
+					try
+					{
+						var json = JSON.parse(newValue);
+						
+						for (var i = 0; i < json.length; i++)
+						{
+							var layout = new window[json[i].layout](graph);
+							
+							if (json[i].config != null)
+							{
+								for (var key in json[i].config)
+								{
+									layout[key] = json[i].config[key];
+								}
+							}
+							
+							editorUi.executeLayout(function()
+							{
+								var selectionCells = graph.getSelectionCells();
+								layout.execute(graph.getDefaultParent(), selectionCells.length == 0 ?
+									null : selectionCells);
+							}, i == json.length - 1);
+						}
+						
+						editorUi.customLayoutConfig = json;
+					}
+					catch (e)
+					{
+						editorUi.handleError(e);
+						console.error(e);
+					}
+				}
+			});
+	    	
+	    	dlg.textarea.style.width = '600px';
+	    	dlg.textarea.style.height = '380px';
+			editorUi.showDialog(dlg.container, 620, 460, true, true);
+			dlg.init();
+		});
+		
+		var layoutMenu = this.get('layout');
+		var layoutMenuFunct = layoutMenu.funct;
+		
+		layoutMenu.funct = function(menu, parent)
+		{
+			layoutMenuFunct.apply(this, arguments);
+			
+			menu.addSeparator(parent);
+			editorUi.menus.addMenuItem(menu, 'runLayout', parent, null, null, mxResources.get('apply') + '...');
+		};
+		
 		this.put('help', new Menu(mxUtils.bind(this, function(menu, parent)
 		{
 			if (!mxClient.IS_CHROMEAPP && editorUi.isOffline())
@@ -2770,9 +2840,9 @@
 				{
 					menu.addSeparator(parent);
 					
-					menu.addItem(mxResources.get('confCloud', null, 'Confluence Cloud') + '...', null, function()
+					menu.addItem(mxResources.get('confluenceCloud') + '...', null, function()
 					{
-						editorUi.showRemotelyStoredLibrary(mxResources.get('confCloudLibs', null, 'Confluence Cloud Libraries'));
+						editorUi.showRemotelyStoredLibrary(mxResources.get('libraries'));
 					}, parent);
 				}
 			}));
@@ -2782,17 +2852,69 @@
 		this.put('edit', new Menu(mxUtils.bind(this, function(menu, parent)
 		{
 			this.addMenuItems(menu, ['undo', 'redo', '-', 'cut', 'copy', 'paste', 'delete', '-', 'duplicate', '-',
-									 'find', '-',
-			                         'editData', 'editTooltip', '-', 'editStyle', 'editGeometry', '-',
+									 'find', '-', 'editData', 'editTooltip', '-', 'editStyle', 'editGeometry', '-',
 			                         'edit', '-', 'editLink', 'openLink', '-',
 			                         'selectVertices', 'selectEdges', 'selectAll', 'selectNone', '-', 'lockUnlock']);
 		})));
+
+		var action = editorUi.actions.addAction('comments', mxUtils.bind(this, function()
+		{
+			if (this.commentsWindow == null)
+			{
+				// LATER: Check outline window for initial placement
+				this.commentsWindow = new CommentsWindow(editorUi, document.body.offsetWidth - 380, 120, 300, 350);
+				//TODO Are these events needed?
+				this.commentsWindow.window.addListener('show', function()
+				{
+					editorUi.fireEvent(new mxEventObject('comments'));
+				});
+				this.commentsWindow.window.addListener('hide', function()
+				{
+					editorUi.fireEvent(new mxEventObject('comments'));
+				});
+				this.commentsWindow.window.setVisible(true);
+				editorUi.fireEvent(new mxEventObject('comments'));
+			}
+			else
+			{
+				this.commentsWindow.window.setVisible(!this.commentsWindow.window.isVisible());
+				this.commentsWindow.refreshCommentsTime();
+			}
+		}));
+		action.setToggleAction(true);
+		action.setSelectedCallback(mxUtils.bind(this, function() { return this.commentsWindow != null && this.commentsWindow.window.isVisible(); }));
+
+		// Destroys comments window to force update or disable if not supported
+		editorUi.editor.addListener('fileLoaded', mxUtils.bind(this, function()
+		{
+			if (this.commentsWindow != null)
+			{
+				this.commentsWindow.destroy();
+				this.commentsWindow = null;
+			}
+		}));
 		
+		// Extends toolbar dropdown to add comments
+		var viewPanelsMenu = this.get('viewPanels');
+		var viewPanelsFunct = viewPanelsMenu.funct;
+		
+		viewPanelsMenu.funct = function(menu, parent)
+		{
+			viewPanelsFunct.apply(this, arguments);
+			
+			if (editorUi.commentsSupported())
+			{
+				editorUi.menus.addMenuItems(menu, ['comments'], parent);
+			}
+		};
+
 		// Overrides view menu to add search and scratchpad
 		this.put('view', new Menu(mxUtils.bind(this, function(menu, parent)
 		{
 			this.addMenuItems(menu, ((this.editorUi.format != null) ? ['formatPanel'] : []).
-				concat(['outline', 'layers', '-']));
+				concat(['outline', 'layers']).concat((editorUi.commentsSupported()) ?
+				['comments', '-'] : ['-']));
+			
 			this.addMenuItems(menu, ['-', 'search'], parent);
 			
 			if (isLocalStorage || mxClient.IS_CHROMEAPP)
