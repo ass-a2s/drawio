@@ -297,7 +297,7 @@ DropboxClient.prototype.getFile = function(path, success, error, asLibrary)
 	var binary = /\.png$/i.test(path);
 
 	if (/^https:\/\//i.test(path) || /\.v(dx|sdx?)$/i.test(path) || /\.gliffy$/i.test(path) ||
-		(!this.ui.useCanvasForExport && binary))
+		 /\.pdf$/i.test(path) || (!this.ui.useCanvasForExport && binary))
 	{
 		var fn = mxUtils.bind(this, function()
 		{
@@ -332,7 +332,7 @@ DropboxClient.prototype.getFile = function(path, success, error, asLibrary)
 			
 			if (index > 0)
 			{
-				var xml = this.ui.extractGraphModelFromPng(data.substring(index + 1));
+				var xml = this.ui.extractGraphModelFromPng(data);
 				
 				if (xml != null && xml.length > 0)
 				{
@@ -743,7 +743,7 @@ DropboxClient.prototype.createLibrary = function(file, success, error)
 	this.ui.confirm(mxResources.get('note') + ': ' + mxResources.get('fileWillBeSavedInAppFolder',
 		[file.name]), mxUtils.bind(this, function()
 	{
-		this.ui.loadUrl(file.link, mxUtils.bind(this, function(data)
+		this.ui.editor.loadUrl(file.link, mxUtils.bind(this, function(data)
 	    {
 		    	this.insertFile(file.name, data, mxUtils.bind(this, function(newFile)
 		    	{
@@ -839,7 +839,7 @@ DropboxClient.prototype.pickFile = function(fn, readOnly)
 										
 										if (index > 0)
 										{
-											var xml = this.ui.extractGraphModelFromPng(data.substring(index + 1));
+											var xml = this.ui.extractGraphModelFromPng(data);
 											
 											if (xml != null && xml.length > 0)
 											{
@@ -887,7 +887,7 @@ DropboxClient.prototype.createFile = function(file, success, error)
 {
 	var binary = /(\.png)$/i.test(file.name);
 	
-	this.ui.loadUrl(file.link, mxUtils.bind(this, function(data)
+	this.ui.editor.loadUrl(file.link, mxUtils.bind(this, function(data)
     {
 		if (data != null && data.length > 0)
 		{

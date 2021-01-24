@@ -139,7 +139,7 @@ TrelloClient.prototype.getFile = function(id, success, error, denyConvert, asLib
 						error({code: App.ERROR_TIMEOUT})
 					}), this.ui.timeout);
 					
-					this.ui.loadUrl(PROXY_URL + '?url=' + encodeURIComponent(meta.url), mxUtils.bind(this, function(data)
+					this.ui.editor.loadUrl(PROXY_URL + '?url=' + encodeURIComponent(meta.url), mxUtils.bind(this, function(data)
 					{
 						window.clearTimeout(timeoutThread);
 				    	
@@ -152,7 +152,7 @@ TrelloClient.prototype.getFile = function(id, success, error, denyConvert, asLib
 	
 							if (index > 0)
 							{
-								var xml = this.ui.extractGraphModelFromPng(data.substring(index + 1));
+								var xml = this.ui.extractGraphModelFromPng(data);
 								
 								if (xml != null && xml.length > 0)
 								{
@@ -177,17 +177,17 @@ TrelloClient.prototype.getFile = function(id, success, error, denyConvert, asLib
 					{
 						window.clearTimeout(timeoutThread);
 					    	
-					    	if (acceptResponse)
-					    	{
-					    		if (req.status == 401)
-					    		{
-					    			this.authenticate(callback, error, true);
-					    		}
-					    		else
-					    		{
-					    			error();
-					    		}
-					    	}
+				    	if (acceptResponse)
+				    	{
+				    		if (req.status == 401)
+				    		{
+				    			this.authenticate(callback, error, true);
+				    		}
+				    		else
+				    		{
+				    			error();
+				    		}
+				    	}
 					}), binary || (meta.mimeType != null &&
 						meta.mimeType.substring(0, 6) == 'image/'));
 				}
@@ -198,7 +198,7 @@ TrelloClient.prototype.getFile = function(id, success, error, denyConvert, asLib
 	    	
 		    	if (acceptResponse)
 		    	{
-				if (err.status == 401)
+		    		if (err != null && err.status == 401)
 		    		{
 		    			this.authenticate(callback, error, true);
 		    		}
@@ -279,7 +279,7 @@ TrelloClient.prototype.saveFile = function(file, success, error)
 				success(meta);
 			}), mxUtils.bind(this, function(err)
 			{
-				if (err.status == 401)
+				if (err != null && err.status == 401)
 	    		{
 					// KNOWN: Does not wait for popup to close for callback
 	    			this.authenticate(callback, error, true);
@@ -348,25 +348,25 @@ TrelloClient.prototype.writeFile = function(filename, data, cardId, success, err
 		  {
 		    if (request.readyState === 4)
 		    {
-			    	window.clearTimeout(timeoutThread);
-			    	
-			    	if (acceptResponse)
+		    	window.clearTimeout(timeoutThread);
+		    	
+		    	if (acceptResponse)
+	    		{
+		    		if (request.status == 200)
+	    			{
+		    			var fileMeta = request.response;
+		    			fileMeta.compoundId = cardId + this.SEPARATOR + fileMeta.id
+		    			success(fileMeta);
+	    			}
+		    		else if (request.status == 401)
 		    		{
-			    		if (request.status == 200)
-		    			{
-			    			var fileMeta = request.response;
-			    			fileMeta.compoundId = cardId + this.SEPARATOR + fileMeta.id
-			    			success(fileMeta);
-		    			}
-			    		else if (request.status == 401)
-			    		{
-			    			this.authenticate(fn, error, true);
-			    		}
-		    			else
-	    				{
-			    			error();
-	    				}
+		    			this.authenticate(fn, error, true);
 		    		}
+	    			else
+    				{
+		    			error();
+    				}
+	    		}
 		    }
 		  });
 		  
@@ -460,9 +460,12 @@ TrelloClient.prototype.showTrelloDialog = function(showFiles, fn)
 	{
 		linkCounter++;
 		var div = document.createElement('div');
-		div.style = "width:100%;text-overflow:ellipsis;overflow:hidden;vertical-align:middle;background:" + (linkCounter % 2 == 0? "#eee" : "#fff");
+		div.style = 'width:100%;text-overflow:ellipsis;overflow:hidden;vertical-align:middle;' +
+			'padding:2px 0 2px 0;background:' + (linkCounter % 2 == 0?
+			((uiTheme == 'dark') ? '#000' : '#eee') :
+			((uiTheme == 'dark') ? '' : '#fff'));
 		var link = document.createElement('a');
-		link.setAttribute('href', 'javascript:void(0);');
+		link.style.cursor = 'pointer';
 		
 		if (preview != null)
 		{
@@ -535,14 +538,14 @@ TrelloClient.prototype.showTrelloDialog = function(showFiles, fn)
 			}),
 			mxUtils.bind(this, function(req)
 			{
-		    		if (req.status == 401)
-		    		{
-		    			this.authenticate(callback, error, true);
-		    		}
-		    		else if (error != null)
-		    		{
-		    			error(req);
-		    		}	
+	    		if (req.status == 401)
+	    		{
+	    			this.authenticate(callback, error, true);
+	    		}
+	    		else if (error != null)
+	    		{
+	    			error(req);
+	    		}	
 			}));
 		});
 		
@@ -572,7 +575,7 @@ TrelloClient.prototype.showTrelloDialog = function(showFiles, fn)
 		
 		nextPageDiv = document.createElement('a');
 		nextPageDiv.style.display = 'block';
-		nextPageDiv.setAttribute('href', 'javascript:void(0);');
+		nextPageDiv.style.cursor = 'pointer';
 		mxUtils.write(nextPageDiv, mxResources.get('more') + '...');
 		
 		var nextPage = mxUtils.bind(this, function()
@@ -658,14 +661,14 @@ TrelloClient.prototype.showTrelloDialog = function(showFiles, fn)
 			}),
 			mxUtils.bind(this, function(req)
 			{
-		    		if (req.status == 401)
-		    		{
-		    			this.authenticate(callback, error, true);
-		    		}
-		    		else if (error != null)
-		    		{
-		    			error({message: req.responseText});
-		    		}	
+	    		if (req.status == 401)
+	    		{
+	    			this.authenticate(callback, error, true);
+	    		}
+	    		else if (error != null)
+	    		{
+	    			error({message: req.responseText});
+	    		}	
 			}));
 		});
 		

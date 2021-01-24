@@ -1,36 +1,54 @@
-window.OPEN_URL = 'https://www.draw.io/open';
+window.PLUGINS_BASE_PATH = '.';
 window.TEMPLATE_PATH = 'templates';
+window.DRAW_MATH_URL = 'math';
+window.DRAWIO_BASE_URL = '.'; //Prevent access to online website since it is not allowed
 FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
+
+//Disables eval for JS (uses shapes.min.js)
+mxStencilRegistry.allowEval = false;
 
 (function()
 {
 	// Overrides default mode
 	App.mode = App.MODE_DEVICE;
+	
+	// Disables preview option in embed dialog
+	EmbedDialog.showPreviewOption = false;
 
 	// Disables new window option in edit diagram dialog
 	EditDiagramDialog.showNewWindowOption = false;
 
-	// Redirects printing to iframe to avoid document.write
-	var printDialogCreatePrintPreview = PrintDialog.createPrintPreview; 
+	PrintDialog.previewEnabled = false;
 	
-	PrintDialog.createPrintPreview = function()
+	PrintDialog.electronPrint = function(editorUi, allPages, pagesFrom, pagesTo, 
+			fit, sheetsAcross, sheetsDown, zoom, pageScale, pageFormat)
 	{
-		var iframe = document.createElement('iframe');
-		document.body.appendChild(iframe);
-
-		var result = printDialogCreatePrintPreview.apply(this, arguments);
-		result.wnd = iframe.contentWindow;
-		result.iframe = iframe;
-				
-		// Workaround for lost gradients in print output
-		result.previousGetBaseUrl = mxSvgCanvas2D.prototype.getBaseUrl;
+		var xml = '', title = '';
+		var file = editorUi.getCurrentFile();
 		
-		mxSvgCanvas2D.prototype.getBaseUrl = function()
+		if (file)
 		{
-			return '';
-		};
+			file.updateFileData();
+			xml = file.getData();
+			title = file.title;
+		}
 		
-		return result;
+		new mxElectronRequest('export', {
+			print: true,
+			format: 'pdf',
+			xml: xml,
+			from: pagesFrom - 1,
+			to: pagesTo - 1,
+			allPages: allPages,
+			pageWidth: pageFormat.width,
+			pageHeight: pageFormat.height,
+			pageScale: pageScale,
+			fit: fit,
+			sheetsAcross: sheetsAcross,
+			sheetsDown: sheetsDown,
+			scale: zoom,
+			fileTitle: title
+		}).send(function(){}, function(){});
 	};
 	
 	var oldWindowOpen = window.open;
@@ -47,32 +65,85 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 		}
 	}
 
-	mxPrintPreview.prototype.addPageBreak = function(doc)
+	var origAppMain = App.main;
+	
+	App.main = function()
 	{
-		// Do nothing
-	};
+		//TODO Move all file system operations to this worker to offload the renderer thread
+		//TODO Use async version of any sync function used here especially if it is in critical path. For example, open dialog sync block the UI until dialog is shown
+		App.filesWorker = new Worker('electronFilesWorker.js');
+		
+		App.filesWorkerReqId = 1;
+		App.filesWorkerReqInfo = {};
 
-	mxPrintPreview.prototype.closeDocument = function()
-	{
-		var doc = this.wnd.document;
-		
-		// Removes all event handlers in the print output
-		mxEvent.release(doc.body);
-	};
-	
-	PrintDialog.printPreview = function(preview)
-	{
-		if (preview.iframe != null)
+		App.filesWorkerReq = function(msg, callback, error)
 		{
-			preview.iframe.contentWindow.print();
-			preview.iframe.parentNode.removeChild(preview.iframe);
+			msg.reqId = App.filesWorkerReqId++;
+			App.filesWorkerReqInfo[msg.reqId] = {callback: callback, error: error};
+			App.filesWorker.postMessage(msg);	
+		};
 		
-			mxSvgCanvas2D.prototype.getBaseUrl = preview.previousGetBaseUrl;
-			preview.iframe = null;
+		App.filesWorker.onmessage = function(e) 
+		{
+			var resp = e.data;
+			var callbacks = App.filesWorkerReqInfo[resp.reqId];
+			
+			if (resp.error)
+			{
+				callbacks.error(resp.msg, resp.e);
+			}
+			else
+			{
+				callbacks.callback(resp.data);
+			}
+			
+			delete App.filesWorkerReqInfo[resp.reqId];
+		};
+		
+		//Load desktop plugins
+		var plugins = (mxSettings.settings != null) ? mxSettings.getPlugins() : null;
+		App.initPluginCallback();
+
+		if (plugins != null && plugins.length > 0)
+		{
+			for (var i = 0; i < plugins.length; i++)
+			{
+				try
+				{
+					if (plugins[i].startsWith('/plugins/'))
+					{
+						plugins[i] = '.' + plugins[i];
+					}
+					//Support old plugins added using file:// workaround
+					else if (!plugins[i].startsWith('file://'))
+					{
+						var fs = require('fs');
+						var sysPath = require('path');
+			        	var pluginsFile = sysPath.join(getAppDataFolder(), '/plugins', plugins[i]);
+			        	
+			        	if (fs.existsSync(pluginsFile))
+			        	{
+			        		plugins[i] = 'file://' + pluginsFile;
+			        	}
+			        	else
+		        		{
+			        		continue; //skip not found files
+		        		}
+					}
+						
+					mxscript(plugins[i]);
+				}
+				catch (e)
+				{
+					// ignore
+				}
+			}
 		}
+		
+		//Disable web plugins loading
+		urlParams['plugins'] = '0';
+		origAppMain.apply(this, arguments);
 	};
-	
-	PrintDialog.previewEnabled = false;
 	
 	var menusInit = Menus.prototype.init;
 	Menus.prototype.init = function()
@@ -86,18 +157,109 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 			editorUi.openLink('https://www.draw.io/')
 		}));
 		
+		this.put('openRecent', new Menu(function(menu, parent)
+		{
+			var recent = editorUi.getRecent();
+
+			if (recent != null)
+			{
+				for (var i = 0; i < recent.length; i++)
+				{
+					(function(entry)
+					{
+						menu.addItem(entry.title, null, function()
+						{
+							function doOpenRecent()
+							{
+								//Simulate opening a file via args
+								editorUi.loadArgs({args: [entry.id]});
+							};
+							
+							var file = editorUi.getCurrentFile();
+							
+							if (file != null && file.isModified())
+							{
+								editorUi.confirm(mxResources.get('allChangesLost'), null, doOpenRecent,
+									mxResources.get('cancel'), mxResources.get('discardChanges'));
+							}
+							else
+							{
+								doOpenRecent();
+							}
+						}, parent);
+					})(recent[i]);
+				}
+
+				menu.addSeparator(parent);
+			}
+
+			menu.addItem(mxResources.get('reset'), null, function()
+			{
+				editorUi.resetRecent();
+			}, parent);
+		}));
+		
 		// Replaces file menu to replace openFrom menu with open and rename downloadAs to export
 		this.put('file', new Menu(mxUtils.bind(this, function(menu, parent)
 		{
-			this.addMenuItems(menu, ['new', 'open', '-', 'synchronize', '-', 'save', 'saveAs', '-', 'import'], parent);
+			this.addMenuItems(menu, ['new', 'open'], parent);
+			this.addSubmenu('openRecent', menu, parent);
+			this.addMenuItems(menu, ['-', 'synchronize', '-', 'save', 'saveAs', '-', 'import'], parent);
 			this.addSubmenu('exportAs', menu, parent);
 			menu.addSeparator(parent);
 			this.addSubmenu('embed', menu, parent);
 			menu.addSeparator(parent);
-			this.addMenuItems(menu, ['newLibrary', 'openLibrary', '-', 'pageSetup',
-				'print', '-', 'close'], parent);
+			this.addMenuItems(menu, ['newLibrary', 'openLibrary'], parent);
+
+			var file = editorUi.getCurrentFile();
+			
+			if (file != null && editorUi.fileNode != null)
+			{
+				var filename = (file.getTitle() != null) ?
+					file.getTitle() : editorUi.defaultFilename;
+				
+				if (!/(\.html)$/i.test(filename) &&
+					!/(\.svg)$/i.test(filename))
+				{
+					this.addMenuItems(menu, ['-', 'properties']);
+				}
+			}
+			
+			this.addMenuItems(menu, ['-', 'pageSetup', 'print', '-', 'close'], parent);
 			// LATER: Find API for application.quit
 		})));
+	};
+	
+	function getDocumentsFolder()
+	{
+		//On windows, misconfigured Documents folder cause an exception
+		try
+		{
+			return require('electron').remote.app.getPath('documents');
+		}
+		catch(e) {}
+		
+		return '.';
+	};
+
+	function getAppDataFolder()
+	{
+		try
+		{
+			var fs = require('fs');
+			var appDataDir = require('electron').remote.app.getPath('appData');
+        	var drawioDir = appDataDir + '/draw.io';
+        	
+        	if (!fs.existsSync(drawioDir)) //Usually this dir already exists
+        	{
+        		fs.mkdirSync(drawioDir);
+        	}
+        	
+			return drawioDir;
+		}
+		catch(e) {}
+		
+		return '.';
 	};
 	
 	var graphCreateLinkForHint = Graph.prototype.createLinkForHint;
@@ -123,7 +285,7 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 	{
 		require('electron').shell.openExternal(url);
 	};
-	
+
 	// Initializes the user interface
 	var editorUiInit = EditorUi.prototype.init;
 	EditorUi.prototype.init = function()
@@ -135,9 +297,9 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 		
 		global.__emt_isModified =
 		e => {
-			if (this.getCurrentFile())
+			if (editorUi.getCurrentFile())
 			{
-				return this.getCurrentFile().isModified()
+				return editorUi.getCurrentFile().isModified()
 			}
 
 			return false
@@ -166,14 +328,20 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 				const electron = require('electron');
 				var remote = electron.remote;
 				var dialog = remote.dialog;
-
-		        var paths = dialog.showOpenDialog({properties: ['openFile']});
+				const sysPath = require('path')
+				var lastDir = localStorage.getItem('.lastImpDir');
+				
+		        var paths = dialog.showOpenDialogSync({
+		        	defaultPath: lastDir || getDocumentsFolder(),
+		        	properties: ['openFile']
+		        });
 			           
 		        if (paths !== undefined && paths[0] != null)
 		        {
 		        	var path = paths[0];
+		        	localStorage.setItem('.lastImpDir', sysPath.dirname(path));
 		        	var asImage = /\.png$/i.test(path) || /\.gif$/i.test(path) || /\.jpe?g$/i.test(path);
-		        	var encoding = (asImage || /\.vsdx$/i.test(path) || /\.vssx$/i.test(path)) ?
+		        	var encoding = (asImage || /\.pdf$/i.test(path) || /\.vsdx$/i.test(path) || /\.vssx$/i.test(path)) ?
 		        		'base64' : 'utf-8';
 
 					if (editorUi.spinner.spin(document.body, mxResources.get('loading')))
@@ -229,7 +397,16 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 									}
 									else
 									{
-										if (/\.png$/i.test(path))
+										if (/\.pdf$/i.test(path))
+									    {
+											var tmp = Editor.extractGraphModelFromPdf(data);
+											
+											if (tmp != null)
+											{
+												data = tmp;
+											}
+							    		}
+										else if (/\.png$/i.test(path))
 										{
 											var tmp = editorUi.extractGraphModelFromPng(data);
 											
@@ -348,6 +525,266 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 		// Adds shortcut keys for file operations
 		editorUi.keyHandler.bindAction(78, true, 'new'); // Ctrl+N
 		editorUi.keyHandler.bindAction(79, true, 'open'); // Ctrl+O
+		
+		var copyAsImage = this.actions.addAction('copyAsImage', mxUtils.bind(this, function()
+		{
+			const electron = require('electron');
+			var remote = electron.remote;
+			var clipboard = remote.clipboard;
+			var nativeImage = remote.nativeImage;
+			
+			if (editorUi.spinner.spin(document.body, mxResources.get('exporting')))
+			{
+				editorUi.exportToCanvas(function(canvas)
+				{
+			   		try
+			   		{
+			   			var img = nativeImage.createFromDataURL(editorUi.createImageDataUri(canvas, null, 'png'));
+			   			clipboard.writeImage(img);
+		   				editorUi.spinner.stop();
+			   		}
+			   		catch (e)
+			   		{
+			   			editorUi.handleError(e);
+			   		}
+				}, null, null, null, function(e)
+				{
+					editorUi.spinner.stop();
+					editorUi.handleError(e);
+			   	}, null, false, 1, true);
+			}
+		}));
+		
+		copyAsImage.isEnabled = function()
+		{
+			return editorUi.isExportToCanvas() && !editorUi.editor.graph.isSelectionEmpty();
+		}
+	
+		// Inserts copyAsImage into popup menu
+		editorUi.menus.addPopupMenuEditItems = function(menu, cell, evt)
+		{
+			if (editorUi.editor.graph.isSelectionEmpty())
+			{
+				this.addMenuItems(menu, ['pasteHere'], null, evt);
+			}
+			else
+			{
+				this.addMenuItems(menu, ['delete', '-', 'cut', 'copy', 'copyAsImage', '-', 'duplicate'], null, evt);
+			}
+		};
+		
+		function createGraph()
+		{
+			var graph = new Graph();
+	        graph.setExtendParents(false);
+	        graph.setExtendParentsOnAdd(false);
+	        graph.setConstrainChildren(false);
+	        graph.setHtmlLabels(true);
+	        graph.getModel().maintainEdgeParent = false;
+	        return graph;
+		};
+		
+		function cloneMxCLipboardToSys()
+		{
+			var cells = mxClipboard.getCells();
+			
+			if (cells && cells.length > 0)
+			{
+				try
+				{
+					var tmpGraph = createGraph();
+					tmpGraph.importCells(cells, 0, 0, tmpGraph.getDefaultParent());
+					const electron = require('electron');
+					var remote = electron.remote;
+					var clipboard = remote.clipboard;
+					var codec = new mxCodec();
+		            var node = codec.encode(tmpGraph.getModel());
+		            var modelString = mxUtils.getXml(node);
+					clipboard.writeText(encodeURIComponent(modelString));
+				}
+				catch(e)
+				{
+					//Ignore
+				} 
+			}
+		};
+		
+		function cloneSysCLipboardToMx()
+		{
+			try
+			{
+				const electron = require('electron');
+				var remote = electron.remote;
+				var clipboard = remote.clipboard;
+				var modelString = clipboard.readText(); 
+				
+				if (modelString)
+				{
+					modelString = decodeURIComponent(modelString);
+					var xmlDoc = mxUtils.parseXml(modelString);
+					var tmpGraph = createGraph();
+					var codec = new mxCodec(xmlDoc);
+					var model = tmpGraph.getModel();
+					codec.decode(xmlDoc.documentElement, model);
+					mxClipboard.setCells(model.root.children[0].children);
+				}
+			}
+			catch(e)
+			{
+				//Ignore, the contents of mxClipboard will be used
+			}
+		};
+		
+		//Set system clipboard on menu copy/cut
+		var origCut = this.actions.get('cut').funct;
+		
+		editorUi.actions.addAction('cut', function()
+		{
+			origCut();
+			cloneMxCLipboardToSys();
+		}, null, 'sprite-cut', Editor.ctrlKey + '+X');
+		
+		var origCopy = this.actions.get('copy').funct;
+		
+		editorUi.actions.addAction('copy', function()
+		{
+			origCopy();
+			cloneMxCLipboardToSys();
+		}, null, 'sprite-copy', Editor.ctrlKey + '+C');
+		
+		//Get data from system clipboard for pase/pasteHere
+		var origPaste = this.actions.get('paste').funct;
+		
+		editorUi.actions.addAction('paste', function()
+		{
+			cloneSysCLipboardToMx();
+			origPaste();
+		}, false, 'sprite-paste', Editor.ctrlKey + '+V');
+	
+		var origPasteHere = this.actions.get('pasteHere').funct;
+
+		editorUi.actions.addAction('pasteHere', function()
+		{
+			cloneSysCLipboardToMx();
+			origPasteHere();
+		});
+		
+		//Enable paste action even if mxClipboard is empty! TODO Is this OK?
+		editorUi.updatePasteActionStates = function()
+		{
+			var graph = this.editor.graph;
+			var paste = this.actions.get('paste');
+			var pasteHere = this.actions.get('pasteHere');
+			
+			paste.setEnabled(this.editor.graph.cellEditor.isContentEditing() || 
+					(graph.isEnabled() && !graph.isCellLocked(graph.getDefaultParent())));
+			pasteHere.setEnabled(paste.isEnabled());
+		};
+		
+		editorUi.actions.addAction('plugins...', function()
+		{
+			editorUi.showDialog(new PluginsDialog(editorUi, function(callback)
+			{
+				var div = document.createElement('div');
+				
+				var title = document.createElement('span');
+				title.style.marginTop = '6px';
+				mxUtils.write(title, mxResources.get('builtinPlugins') + ': ');
+				div.appendChild(title);
+				
+				var pluginsSelect = document.createElement('select');
+				pluginsSelect.style.width = '150px';
+				
+				for (var i = 0; i < App.publicPlugin.length; i++)
+				{
+					var option = document.createElement('option');
+					mxUtils.write(option, App.publicPlugin[i]);
+					option.value = App.publicPlugin[i];
+					pluginsSelect.appendChild(option);
+				}
+				
+				div.appendChild(pluginsSelect);
+				mxUtils.br(div);
+				mxUtils.br(div);
+				
+				title = document.createElement('span');
+				mxUtils.write(title, mxResources.get('extPlugins') + ': ');
+				div.appendChild(title);
+				
+				var extPluginsBtn = mxUtils.button(mxResources.get('selectFile') + '...', function()
+				{
+					const electron = require('electron');
+					var remote = electron.remote;
+					var dialog = remote.dialog;
+					const sysPath = require('path');
+					var lastDir = localStorage.getItem('.lastPluginDir');
+					
+			        var paths = dialog.showOpenDialogSync({
+			        	defaultPath: lastDir || getDocumentsFolder(),
+			        	filters: [
+			        	    { name: 'draw.io Plugins', extensions: ['js'] },
+			        	    { name: 'All Files', extensions: ['*'] }
+			    	    ],
+			        	properties: ['openFile']
+			        });
+				           
+			        if (paths !== undefined && paths[0] != null)
+			        {
+			        	localStorage.setItem('.lastPluginDir', sysPath.dirname(paths[0]));
+			        	var fs = require('fs');
+			        	var pluginsDir = sysPath.join(getAppDataFolder(), '/plugins');
+			        	
+			        	if (!fs.existsSync(pluginsDir))
+			        	{
+			        		fs.mkdirSync(pluginsDir);
+			        	}
+			        	
+			        	var pluginName = sysPath.basename(paths[0]);
+			        	var dstFile = sysPath.join(pluginsDir, pluginName);
+			        	
+			        	if (fs.existsSync(dstFile))
+		        		{
+			        		alert(mxResources.get('fileExists'));
+		        		}
+			        	else
+			        	{
+				        	fs.copyFile(paths[0], dstFile, (err) => 
+				        	{
+				        		if (err)
+				        		{
+				        			alert('Adding plugin failed.');
+				        		}
+				        		else
+				        		{
+					        		callback(pluginName);
+					        		editorUi.hideDialog();
+				        		}
+			        		});
+			        	}
+			        }
+				});
+				
+				extPluginsBtn.className = 'geBtn';
+				div.appendChild(extPluginsBtn);
+							
+				var dlg = new CustomDialog(editorUi, div, mxUtils.bind(this, function()
+				{
+	        		callback(App.pluginRegistry[pluginsSelect.value]);
+				}));
+				editorUi.showDialog(dlg.container, 300, 110, true, true);
+			},
+			function(plugin)
+			{
+				var fs = require('fs');
+				const sysPath = require('path')
+				var pluginsFile = sysPath.join(getAppDataFolder(), '/plugins', plugin);
+	        	
+	        	if (fs.existsSync(pluginsFile))
+	        	{
+	        		fs.unlinkSync(pluginsFile);
+	        	}
+			}).container, 360, 170, true, false);
+		});
 	}
 	
 	var appLoad = App.prototype.load;
@@ -361,27 +798,67 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 		{
 			this.loadArgs(argsObj)
 		})
+
+		var editorUi = this;
+		
+		ipcRenderer.on('export-vsdx', (event, argsObj) =>
+		{
+			var file = new LocalFile(editorUi, argsObj.xml, '');
+			
+			editorUi.fileLoaded(file);
+
+			try
+			{
+				editorUi.saveData = function(filename, format, data, mimeType, base64Encoded)
+				{
+					ipcRenderer.send('export-vsdx-finished', data);
+				};
+				
+				var expSuccess = new VsdxExport(editorUi).exportCurrentDiagrams();
+
+				if (!expSuccess)
+				{
+					ipcRenderer.send('export-vsdx-finished', null);
+				}
+			}
+			catch (e)
+			{
+				ipcRenderer.send('export-vsdx-finished', null);
+			}
+		})	
+
+		//We do some async stuff during app loading so we need to know exactly when loading is finished (it is not when onload is finished)
+		ipcRenderer.send('app-load-finished', null);
 	}
 	
 	App.prototype.loadArgs = function(argsObj)
 	{
 		var paths = argsObj.args;
 		
-		// If a file is passed 
-		if (paths !== undefined && paths[0] != null)
+		// If a file is passed, and it is not an argument (has a leading -) 
+		if (paths !== undefined && paths[0] != null && paths[0].indexOf('-') != 0 && this.spinner.spin(document.body, mxResources.get('loading')))
 		{
 			var path = paths[0];
+			this.hideDialog();
 			
-			var success = mxUtils.bind(this, function(fileEntry, data, stat)
+			var success = mxUtils.bind(this, function(fileEntry, data, stat, name, isModified)
 			{
-				var file = new LocalFile(this, data, '');
-				file.fileObject = fileEntry;
-				file.stat = stat;
-				this.fileLoaded(file);
+				this.spinner.stop();
+				
+				if (data != null)
+				{
+					var file = new LocalFile(this, data, name || '');
+					file.fileObject = fileEntry;
+					file.stat = stat;
+					file.setModified(isModified? true : false);
+					this.fileLoaded(file);
+				}
 			});
 			
 			var error = mxUtils.bind(this, function(e)
 			{
+				this.spinner.stop();
+				
 				if (e.code === 'ENOENT')
 				{
 					var title = path.replace(/^.*[\\\/]/, '');
@@ -415,16 +892,58 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 		}		
 	}
 
+	var origFileLoaded = EditorUi.prototype.fileLoaded;
+	
+	EditorUi.prototype.fileLoaded = function(file)
+	{
+		
+		if (file != null)
+		{
+			if (file.fileObject == null)
+			{
+				var fname = file.getTitle();
+				
+				var fileInfo = openFilesMap[fname];
+				
+				if (fileInfo != null)
+				{
+					file.fileObject = {
+						name: fileInfo.name,
+						path: fileInfo.path,
+						type: fileInfo.type || 'utf-8'
+					};
+					//delete it such that it is not used again incorrectly
+					delete openFilesMap[fname];
+				}
+			}
+			
+			if (file.fileObject != null)
+			{
+				var title = file.fileObject.path;
+				
+				if (title.length > 100)
+				{
+					title = '...' + title.substr(title.length - 97);
+				}
+				
+				this.addRecent({id: file.fileObject.path, title: title});
+			}
+		}
+		
+		origFileLoaded.apply(this, arguments);
+	};
+	
 	// Uses local picker
 	App.prototype.pickFile = function()
 	{
 		var doPickFile = mxUtils.bind(this, function()
 		{
-			this.chooseFileEntry(mxUtils.bind(this, function(fileEntry, data, stat)
+			this.chooseFileEntry(mxUtils.bind(this, function(fileEntry, data, stat, name, isModified)
 			{
 				var file = new LocalFile(this, data, '');
 				file.fileObject = fileEntry;
 				file.stat = stat;
+				file.setModified(isModified? true : false);
 				this.fileLoaded(file);
 			}));
 		});
@@ -453,8 +972,7 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 		{
 			try
 			{
-				var library = new LocalLibrary(this, data, fileEntry.name);
-				library.fileObject = fileEntry;
+				var library = new DesktopLibrary(this, data, fileEntry);
 				this.loadLibrary(library);
 			}
 			catch (e)
@@ -470,11 +988,23 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 		const electron = require('electron');
 		var remote = electron.remote;
 		var dialog = remote.dialog;
-
-        var paths = dialog.showOpenDialog({properties: ['openFile']});
+		const sysPath = require('path')
+		var lastDir = localStorage.getItem('.lastOpenDir');
+		
+        var paths = dialog.showOpenDialogSync({
+        	defaultPath: lastDir || getDocumentsFolder(),
+        	filters: [
+        	    { name: 'draw.io Diagrams', extensions: ['drawio', 'xml', 'png', 'svg', 'html'] },
+        	    { name: 'VSDX Documents', extensions: ['vsdx'] },
+        	    { name: 'All Files', extensions: ['*'] }
+    	    ],
+        	properties: ['openFile']
+        });
 	           
         if (paths !== undefined && paths[0] != null)
         {
+        	localStorage.setItem('.lastOpenDir', sysPath.dirname(paths[0]));
+
 			this.readGraphFile(fn, mxUtils.bind(this, function(err)
 			{
 				this.handleError(err);
@@ -486,32 +1016,111 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
         }
 	};
 
+	//In order not to repeat the logic for opening a file, we collect files information here and use them in openLocalFile
+	var origOpenFiles = EditorUi.prototype.openFiles;
+	var openFilesMap = {};
+	
+	EditorUi.prototype.openFiles = function(files, temp)
+	{
+		openFilesMap = {};
+
+		for (var i = 0; i < files.length; i++)
+		{
+			openFilesMap[files[i].name] = files[i];
+		}
+		
+		origOpenFiles.apply(this, arguments);
+	};
+	
 	App.prototype.readGraphFile = function(fn, fnErr, path)
 	{
 		var fs = require('fs');
 		var index = path.lastIndexOf('.png');
 		var isPng = index > -1 && index == path.length - 4;
-		var encoding = isPng ? 'base64' : 'utf-8'
+		var isVsdx = /\.vsdx$/i.test(path) || /\.vssx$/i.test(path);
+		var encoding = isVsdx? null : ((isPng || /\.pdf$/i.test(path)) ? 'base64' : 'utf-8');
+		var isModified = false, fileLoaded = false;
 
-		fs.readFile(path, encoding, mxUtils.bind(this, function (e, data)
+		var readData = mxUtils.bind(this, function (e, data)
 		{
 			if (e)
 			{
 				fnErr(e);
+				fileLoaded = true;
 			}
 			else
 			{
-				if (isPng)
+				var fileEntry = new Object();
+				fileEntry.path = path;
+				fileEntry.name = path.replace(/^.*[\\\/]/, '');
+				fileEntry.type = encoding;
+
+				// VSDX and PDF files are imported instead of being opened
+				if (isVsdx)
+				{
+					var name = fileEntry.name;
+
+					this.importVisio(data, mxUtils.bind(this, function(xml)
+					{
+						var dot = name.lastIndexOf('.');
+						
+						if (dot >= 0)
+						{
+							name = name.substring(0, name.lastIndexOf('.')) + '.drawio';
+						}
+						else
+						{
+							name = name + '.drawio';
+						}
+						
+						if (xml.substring(0, 10) == '<mxlibrary')
+						{
+							// Creates new temporary file if library is dropped in splash screen
+							if (this.getCurrentFile() == null && urlParams['embed'] != '1')
+							{
+								this.openLocalFile(this.emptyDiagramXml, this.defaultFilename);
+							}
+						
+							try
+			    			{
+								this.loadLibrary(new LocalLibrary(this, xml, name));
+			    			}
+							catch (e)
+			    			{
+			    				this.handleError(e, mxResources.get('errorLoadingFile'));
+			    			}
+							
+							fn();
+						}
+						else
+						{
+							fn(null, xml, null, name, isModified);
+						}
+						
+						fileLoaded = true;
+					}), null, name);
+					
+					return;
+				}
+				else if (/\.pdf$/i.test(path))
+			    {
+					var tmp = Editor.extractGraphModelFromPdf('data:application/pdf;base64,' + data);
+					
+					if (tmp != null)
+					{
+						var name = fileEntry.name;
+						fn(null, tmp, null, name.substring(0, name.lastIndexOf('.')) + '.drawio', isModified);
+						fileLoaded = true;
+
+						return;
+					}
+	    		}
+				else if (isPng)
 				{
 					// Detecting png by extension. Would need https://github.com/mscdex/mmmagic
 					// to do it by inspection
 					data = this.extractGraphModelFromPng('data:image/png;base64,' + data);
 				}
-
-				var fileEntry = new Object();
-				fileEntry.path = path;
-				fileEntry.name = path.replace(/^.*[\\\/]/, '');
-				fileEntry.type = encoding;
 
 				fs.stat(path, function(err, stat)
 				{
@@ -521,11 +1130,58 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 					}
 					else
 					{
-						fn(fileEntry, data, stat);
+						fn(fileEntry, data, stat, null, isModified);
 					}
+					
+					fileLoaded = true;
 				});
 			}
-		}));
+		});
+ 
+		fs.readFile(path, encoding, readData);
+
+    	//Check if a bkp file exists, if one exists, ask user to restore/ignore
+		var checkBkpFile = mxUtils.bind(this, function (e, data)
+		{
+			//Backup file must be loaded after actual file
+			if (!fileLoaded)
+			{
+				setTimeout(function()
+				{
+					checkBkpFile(e, data);
+				}, 10);
+				return;
+			}
+			
+			if (!e)
+			{
+				var dlg = new DraftDialog(this, mxResources.get('backupFound'),
+						data, mxUtils.bind(this, function()
+				{
+					this.hideDialog();
+					isModified = true;
+					readData(null, data);
+					fs.unlink(bkpFile, (err) => {}); //Ignore errors!
+				}), mxUtils.bind(this, function()
+				{
+					this.hideDialog();
+					fs.unlink(bkpFile, (err) => {}); //Ignore errors!
+				}));
+				
+				this.showDialog(dlg.container, 640, 480, true, false, mxUtils.bind(this, function(cancel)
+				{
+					if (cancel)
+					{
+						//TODO Rename backup file?
+					}
+				}));
+				
+				dlg.init();
+			}
+		});
+		
+		var bkpFile = getBkpFilePath(path);
+		fs.readFile(bkpFile, encoding, checkBkpFile);		
 	};
 
 	// Disables temp files in Electron
@@ -549,10 +1205,11 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 		}
 		else
 		{
-			this.ui.readGraphFile(mxUtils.bind(this, function(fileEntry, data, stat)
+			this.ui.readGraphFile(mxUtils.bind(this, function(fileEntry, data, stat, name, isModified)
 			{
 				var file = new LocalFile(this, data, '');
 				file.stat = stat;
+				file.setModified(isModified? true : false);
 				success(file);
 			}), error, this.fileObject.path);
 		}
@@ -599,14 +1256,14 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 				
 				if (this.ui.spinner.spin(document.body, mxResources.get('loading')))
 				{
-					this.ui.readGraphFile(mxUtils.bind(this, function(fileEntry, data, stat)
+					this.ui.readGraphFile(mxUtils.bind(this, function(fileEntry, data, stat, name, isModified)
 					{
 						this.ui.spinner.stop();
 						
 						var file = new LocalFile(this.ui, data, '');
 						file.fileObject = fileEntry;
 						file.stat = stat;
-						
+						file.setModified(isModified? true : false);
 						this.ui.fileLoaded(file);
 						this.ui.restoreViewState(page, viewState, selection);
 		
@@ -650,11 +1307,6 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 		return this.fileObject != null;
 	};
 	
-	LocalLibrary.prototype.isAutosave = function()
-	{
-		return this.fileObject != null;
-	};
-	
 	LocalFile.prototype.getTitle = function()
 	{
 		return (this.fileObject != null) ? this.fileObject.name : this.title;
@@ -667,26 +1319,56 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 	
 	// Restores default implementation of open with autosave
 	LocalFile.prototype.open = DrawioFile.prototype.open;
-
+	
 	LocalFile.prototype.save = function(revision, success, error, unloading, overwrite)
 	{
-		DrawioFile.prototype.save.apply(this, arguments);
-		
-		this.saveFile(revision, success, error, unloading, overwrite);
+		DrawioFile.prototype.save.apply(this, [revision, mxUtils.bind(this, function()
+		{
+			this.saveFile(revision, success, error, unloading, overwrite);
+		}), error, unloading, overwrite]);
 	};
 
-	LocalLibrary.prototype.save = function(revision, success, error)
-	{
-		LocalFile.prototype.saveFile.apply(this, arguments);
-	};
-	
 	LocalFile.prototype.isConflict = function(stat)
 	{
 		return stat != null && this.stat != null && stat.mtimeMs != this.stat.mtimeMs;
 	};
 	
+	LocalFile.prototype.getFilename = function()
+	{
+		var filename = this.title;
+		
+		// Adds default extension
+		if (filename.length > 0 && (!/(\.xml)$/i.test(filename) && !/(\.html)$/i.test(filename) &&
+			!/(\.svg)$/i.test(filename) && !/(\.png)$/i.test(filename) && !/(\.drawio)$/i.test(filename)))
+		{
+			filename += '.drawio';
+		}
+		
+		return filename;
+	};
+	
+	function getBkpFilePath(filePath)
+	{
+		const path = require('path');
+		return path.join(path.dirname(filePath), '~$' + path.basename(filePath) + '.bkp');
+	};
+	
+	// Prototype inheritance needs new functions to be added to subclasses
+	LocalLibrary.prototype.getFilename = LocalFile.prototype.getFilename;
+	
 	LocalFile.prototype.saveFile = function(revision, success, error, unloading, overwrite)
 	{
+		//Safeguard in case saveFile is called from online code in the future
+		if (typeof success !== 'function')
+		{
+			if (typeof unloading === 'function')
+			{
+				//Call error
+				unloading({message: 'This is a bug, please report!'}); //Original draw.io function parameters are (title, revision, success, error, useCurrentData)
+			}
+			return;
+		}
+		
 		if (!this.savingFile)
 		{
 			var fn = mxUtils.bind(this, function()
@@ -696,86 +1378,62 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 					var savedData = this.data;
 					
 					// Makes sure no changes get lost while the file is saved
-					var prevModified = this.isModified;
-					var modified = this.isModified();
-					this.setModified(false);
+					this.setShadowModified(false);
 					this.savingFile = true;
-					var fs = require('fs');
 					
-					var errorWrapper = mxUtils.bind(this, function()
+					var errorWrapper = mxUtils.bind(this, function(e)
 					{
 						this.savingFile = false;
-						this.isModified = prevModified;
-						this.setModified(modified || this.isModified());
 						
 						if (error != null)
 						{
-	        				error();
+	        				error(e);
 						}
 					});
-					
-					var writeFile = mxUtils.bind(this, function()
+
+					if (this.fileObject.bkpPath == null)
 					{
-						fs.writeFile(this.fileObject.path, data, enc || this.fileObject.encoding,
-							mxUtils.bind(this, function (e)
-					    {
-			        		if (e)
-			        		{
-			        			errorWrapper();
-			        		}
-			        		else
-			        		{
-								fs.stat(this.fileObject.path, mxUtils.bind(this, function(e2, stat2)
-								{
-									if (e2)
-					        		{
-					        			errorWrapper();
-					        		}
-									else
-									{
-										this.savingFile = false;
-										this.isModified = prevModified;
-										var lastDesc = this.stat;
-										this.stat = stat2;
-										
-										this.fileSaved(savedData, lastDesc, mxUtils.bind(this, function()
-										{
-											this.contentChanged();
-											
-											if (success != null)
-											{
-												success();
-											}
-										}), error);
-									}
-								}));
-			        		}
-			        	}));
-					});
-					
-					if (overwrite)
-					{
-						writeFile();
+						this.fileObject.bkpPath = getBkpFilePath(this.fileObject.path);
 					}
-					else
+					
+					App.filesWorkerReq({
+						action: 'saveFile',
+						fileObject: this.fileObject,
+						defEnc: enc,
+						data: data,
+						origStat: this.stat,
+						overwrite: overwrite
+					}, mxUtils.bind(this, function(resp)
 					{
-						fs.stat(this.fileObject.path, mxUtils.bind(this, function(err, stat)
+						//No changes during the saving process?
+						this.setModified(this.getShadowModified());
+						this.savingFile = false;
+						var lastDesc = this.stat;
+						this.stat = resp.stat;
+						
+						this.fileSaved(savedData, lastDesc, mxUtils.bind(this, function()
 						{
-							if (this.isConflict(stat))
+							this.contentChanged();
+							
+							if (success != null)
 							{
-								this.inConflictState = true;
-								errorWrapper();
+								success();
 							}
-							else if (err != null && err.code !== 'ENOENT')
-							{
-								errorWrapper();
-							}
-							else
-							{
-								writeFile();
-							}
-						}));
-					}
+						}), error);
+					}), 
+					mxUtils.bind(this, function(errMsg, err)
+					{
+						if (errMsg == 'empty data')
+						{
+							this.ui.handleError({message: mxResources.get('errorSavingFile')});
+						}
+						else if (errMsg == 'conflict')
+						{
+							this.inConflictState = true;
+						}
+						
+						errorWrapper();
+					}));
 				});
 	
 				if (!/(\.png)$/i.test(this.fileObject.name))
@@ -784,10 +1442,12 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 				}
 				else
 				{
+					var p = this.ui.getPngFileProperties(this.ui.fileNode);
+
 					this.ui.getEmbeddedPng(function(data)
 					{
 						doSave(atob(data), 'binary');
-					}, error);
+					}, error, null, p.scale, p.border);
 				}
 			});
 			
@@ -796,11 +1456,30 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 				const electron = require('electron');
 				var remote = electron.remote;
 				var dialog = remote.dialog;
-	
-				var path = dialog.showSaveDialog({defaultPath: this.title});
+				const sysPath = require('path')
+				var lastDir = localStorage.getItem('.lastSaveDir');
+				var name = this.getFilename();
+				var ext = null;
+				
+				if (name != null)
+				{
+					var idx = name.lastIndexOf('.');
+					
+					if (idx > 0)
+					{
+						ext = name.substring(idx + 1);
+						name = name.substring(0, idx);
+					}
+				}
+				
+				var path = dialog.showSaveDialogSync({
+					defaultPath: (lastDir || getDocumentsFolder()) + '/' + name,
+					filters: this.ui.createFileSystemFilters(ext)
+				});
 	
 		        if (path != null)
 		        {
+		        	localStorage.setItem('.lastSaveDir', sysPath.dirname(path));
 					this.fileObject = new Object();
 					this.fileObject.path = path;
 					this.fileObject.name = path.replace(/^.*[\\\/]/, '');
@@ -824,19 +1503,31 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 		const electron = require('electron');
 		var remote = electron.remote;
 		var dialog = remote.dialog;
-		var filename = this.title;
+		const sysPath = require('path')
+		var lastDir = localStorage.getItem('.lastSaveDir');
+		var name = this.getFilename();
+		var ext = null;
 		
-		// Adds default extension
-		if (filename.length > 0 && (!/(\.xml)$/i.test(filename) && !/(\.html)$/i.test(filename) &&
-			!/(\.svg)$/i.test(filename) && !/(\.png)$/i.test(filename) && !/(\.drawio)$/i.test(filename)))
+		if (name == '' && this.fileObject != null && this.fileObject.name != null)
 		{
-			filename += '.drawio';
+			name = this.fileObject.name;
+			var idx = name.lastIndexOf('.');
+			
+			if (idx > 0)
+			{
+				ext = name.substring(idx + 1);
+				name = name.substring(0, idx);
+			}
 		}
 		
-		var path = dialog.showSaveDialog({defaultPath: filename});
+		var path = dialog.showSaveDialogSync({
+			defaultPath: (lastDir || getDocumentsFolder()) + '/' + name,
+			filters: this.ui.createFileSystemFilters(ext)
+		});
         
         if (path != null)
         {
+        	localStorage.setItem('.lastSaveDir', sysPath.dirname(path));
 			this.fileObject = new Object();
 			this.fileObject.path = path;
 			this.fileObject.name = path.replace(/^.*[\\\/]/, '');
@@ -846,6 +1537,35 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 		}
 	};
 	
+	/**
+	 * Loads the given file handle as a local file.
+	 */
+	App.prototype.createFileSystemFilters = function(defaultExt)
+	{
+		var ext = [];
+		
+		for (var i = 0; i < this.editor.diagramFileTypes.length; i++)
+		{
+			var obj = {name: mxResources.get(this.editor.diagramFileTypes[i].description) +
+				' (.' + this.editor.diagramFileTypes[i].extension + ')',
+				extensions: [this.editor.diagramFileTypes[i].extension]};
+			
+			if (this.editor.diagramFileTypes[i].extension == defaultExt)
+			{
+				ext.splice(0, 0, obj);
+			}
+			else
+			{
+				ext.push(obj);
+			}
+		}
+		
+		return ext;
+	};
+	
+	/**
+	 * Loads the given file handle as a local file.
+	 */
 	App.prototype.saveFile = function(forceDialog)
 	{
 		var file = this.getCurrentFile();
@@ -856,6 +1576,11 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 			{
 				file.save(true, mxUtils.bind(this, function()
 				{
+					if (EditorUi.enableDrafts)
+					{
+						file.removeDraft();
+					}
+					
 					file.handleFileSuccess(true);
 				}), mxUtils.bind(this, function(err)
 				{
@@ -866,6 +1591,11 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 			{
 				file.saveAs(null, mxUtils.bind(this, function()
 				{
+					if (EditorUi.enableDrafts)
+					{
+						file.removeDraft();
+					}
+					
 					file.handleFileSuccess(true);
 				}), mxUtils.bind(this, function(err)
 				{
@@ -877,9 +1607,6 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 	
 	/**
 	 * Translates this point by the given vector.
-	 * 
-	 * @param {number} dx X-coordinate of the translation.
-	 * @param {number} dy Y-coordinate of the translation.
 	 */
 	App.prototype.saveLibrary = function(name, images, file, mode, noSpin, noReload, fn)
 	{
@@ -998,11 +1725,183 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 				{
 					this.handleError({message: mxResources.get('errorSavingFile')});
 				}
-			}), function(resp)
+			}), mxUtils.bind(this, function(resp)
 			{
 				this.spinner.stop();
 				this.handleError(resp);
+			}));
+		}
+	};
+
+	function mxElectronRequest(reqType, reqObj)
+	{
+		this.reqType = reqType;
+		this.reqObj = reqObj;
+	};
+
+	//Extends mxXmlRequest
+	mxUtils.extend(mxElectronRequest, mxXmlRequest);
+	
+	mxElectronRequest.prototype.send = function(callback, error)
+	{
+		const ipcRenderer = require('electron').ipcRenderer;
+		ipcRenderer.send(this.reqType, this.reqObj);
+		
+		ipcRenderer.once(this.reqType + '-success', (event, data) => 
+		{
+			this.response = data;
+			callback();
+			ipcRenderer.send(this.reqType + '-finalize');
+		})
+
+		ipcRenderer.once(this.reqType + '-error', (event, err) => 
+		{
+			this.hasError = true;
+			error(err);
+			ipcRenderer.send(this.reqType + '-finalize');
+		})
+	};
+	
+	mxElectronRequest.prototype.getStatus = function()
+	{
+		return this.hasError? 500 : 200; 
+	}
+	
+	mxElectronRequest.prototype.getText = function()
+	{
+		return this.response;
+	}
+	
+		//Direct export to pdf
+		EditorUi.prototype.createDownloadRequest = function(filename, format, ignoreSelection, base64, transparent, currentPage, scale, border, grid)
+		{
+			var graph = this.editor.graph;
+			var bounds = graph.getGraphBounds();
+			
+			// Exports only current page for images that does not contain file data, but for
+			// the other formats with XML included or pdf with all pages, we need to send the complete data and use
+			// the from/to URL parameters to specify the page to be exported.
+			var data = this.getFileData(true, null, null, null, ignoreSelection, currentPage == false? false : format != 'xmlpng');
+			var range = null;
+			var allPages = null;
+			
+			var embed = '0';
+			
+			if (format == 'pdf' && currentPage == false)
+			{
+				allPages = '1';
+			}
+			
+			if (format == 'xmlpng')
+	       	{
+	       		embed = '1';
+	       		format = 'png';
+	       		
+	       		// Finds the current page number
+	       		if (this.pages != null && this.currentPage != null)
+	       		{
+	       			for (var i = 0; i < this.pages.length; i++)
+	       			{
+	       				if (this.pages[i] == this.currentPage)
+	       				{
+	       					range = i;
+	       					break;
+	       				}
+	       			}
+	       		}
+	       	}
+			
+			var bg = graph.background;
+			
+			if (format == 'png' && transparent)
+			{
+				bg = mxConstants.NONE;
+			}
+			else if (!transparent && (bg == null || bg == mxConstants.NONE))
+			{
+				bg = '#ffffff';
+			}
+			
+			var extras = {globalVars: graph.getExportVariables()};
+			
+			if (grid)
+			{
+				extras.grid = {
+					size: graph.gridSize,
+					steps: graph.view.gridSteps,
+					color: graph.view.gridColor
+				};
+			}
+			
+			return new mxElectronRequest('export', {
+				format: format,
+				xml: data,
+				from: range,
+				bg: (bg != null) ? bg : mxConstants.NONE,
+				filename: (filename != null) ? filename : null,
+				allPages: allPages,
+				base64: base64,
+				embedXml: embed,
+				extras: encodeURIComponent(JSON.stringify(extras)),
+				scale: scale,
+				border: border
 			});
+		};
+		
+	//Export Dialog Pdf case
+	var origExportFile = ExportDialog.exportFile;
+	
+	ExportDialog.exportFile = function(editorUi, name, format, bg, s, b, dpi)
+	{
+		var graph = editorUi.editor.graph;
+		
+		if (format == 'xml' || format == 'svg')
+		{
+			return origExportFile.apply(this, arguments);
+		}
+		else
+		{
+			var data = editorUi.getFileData(true, null, null, null, null, true);
+    		var bounds = graph.getGraphBounds();
+			var w = Math.floor(bounds.width * s / graph.view.scale);
+			var h = Math.floor(bounds.height * s / graph.view.scale);
+			
+			editorUi.hideDialog();
+			
+			if ((format == 'png' || format == 'jpg' || format == 'jpeg') && editorUi.isExportToCanvas())
+			{
+				if (format == 'png')
+				{
+					editorUi.exportImage(s, bg == null || bg == 'none', true,
+				   		false, false, b, true, false, null, null, dpi);
+				}
+				else 
+				{
+					editorUi.exportImage(s, false, true,
+						false, false, b, true, false, 'jpeg');
+				}
+			}
+			else 
+			{
+				var extras = {globalVars: graph.getExportVariables()};
+				
+				editorUi.saveRequest(name, format,
+					function(newTitle, base64)
+					{
+						return new mxElectronRequest('export', {
+							format: format,
+							xml: data,
+							bg: (bg != null) ? bg : mxConstants.NONE,
+							filename: (newTitle != null) ? newTitle : null,
+							w: w,
+							h: h,
+							border: b,
+							base64: (base64 || '0'),
+							extras: JSON.stringify(extras),
+							dpi: dpi > 0? dpi : null
+						}); 
+					});
+			}
 		}
 	};
 	
@@ -1012,35 +1911,101 @@ FeedbackDialog.feedbackUrl = 'https://log.draw.io/email';
 		var remote = electron.remote;
 		var dialog = remote.dialog;
 		var resume = (this.spinner != null && this.spinner.pause != null) ? this.spinner.pause() : function() {};
+		const sysPath = require('path')
+		var lastDir = localStorage.getItem('.lastExpDir');
 		
 		// Spinner.stop is asynchronous so we must invoke save dialog asynchronously
 		// to give the spinner some time to stop spinning
 		window.setTimeout(mxUtils.bind(this, function()
 		{
-			var path = dialog.showSaveDialog({defaultPath: filename});
+			var dlgConfig = {defaultPath: (lastDir || getDocumentsFolder()) + '/' + filename};
+			var filters = null;
+			
+			switch (format)
+			{
+				case 'xmlpng':
+				case 'png':
+					filters = [
+				          { name: 'PNG Images', extensions: ['png'] }
+				       ];
+				break;
+				case 'jpg':
+				case 'jpeg':
+					filters = [
+				          { name: 'JPEG Images', extensions: ['jpg', 'jpeg'] }
+				       ];
+				break;
+				case 'svg':
+					filters = [
+				          { name: 'SVG Images', extensions: ['svg'] }
+				       ];
+				break;
+				case 'pdf':
+					filters = [
+				          { name: 'PDF Documents', extensions: ['pdf'] }
+				       ];
+				break;
+				case 'vsdx':
+					filters = [
+				          { name: 'VSDX Documents', extensions: ['vsdx'] }
+				       ];
+				break;
+				case 'html':
+					filters = [
+				          { name: 'HTML Documents', extensions: ['html'] }
+				       ];
+				break;
+				case 'xml':
+					filters = [
+				          { name: 'XML Documents', extensions: ['xml'] }
+				       ];
+				break;
+			};
+			
+			dlgConfig['filters'] = filters;
+			var path = dialog.showSaveDialogSync(dlgConfig);
 	
 	        if (path != null)
 	        {
-				var fs = require('fs');
-				resume();
-				
-				var fileObject = new Object();
-				fileObject.path = path;
-				fileObject.name = path.replace(/^.*[\\\/]/, '');
-				fileObject.type = (base64Encoded) ? 'base64' : 'utf-8';
-				
-				fs.writeFile(fileObject.path, data, fileObject.type, mxUtils.bind(this, function (e)
-			    {
-					this.spinner.stop();
+	        	localStorage.setItem('.lastExpDir', sysPath.dirname(path));
+
+	        	if (data == null || data.length == 0)
+				{
+					this.handleError({message: mxResources.get('errorSavingFile')});
+				}
+				else
+				{
+					var fs = require('fs');
+					resume();
 					
-					if (e)
-					{
-						this.handleError({message: mxResources.get('errorSavingFile')});
-					}
-	        	}));
+					var fileObject = new Object();
+					fileObject.path = path;
+					fileObject.name = path.replace(/^.*[\\\/]/, '');
+					fileObject.type = (base64Encoded) ? 'base64' : 'utf-8';
+					
+					fs.writeFile(fileObject.path, data, fileObject.type, mxUtils.bind(this, function (e)
+				    {
+						this.spinner.stop();
+						
+						if (e)
+						{
+							this.handleError({message: mxResources.get('errorSavingFile')});
+						}
+		        	}));
+				}
 			}
-		}), 0);
+		}), 50);
 	};
 
 	EditorUi.prototype.addBeforeUnloadListener = function() {};
+	
+	EditorUi.prototype.loadDesktopLib = function(libPath, success, error)
+	{
+		this.readGraphFile(mxUtils.bind(this, function(fileEntry, data, stat)
+		{
+			var library = new DesktopLibrary(this, data, fileEntry);
+			this.loadLibrary(library);
+			success(library);
+		}), error, libPath);
+	};
 })();

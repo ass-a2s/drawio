@@ -51,11 +51,8 @@
 				AuthorInit: function ()
 				{
 					MathJax.Hub.Config({
-						jax: ['input/TeX', 'input/MathML', 'input/AsciiMath', 'output/HTML-CSS'],
+						jax: ['input/TeX', 'input/MathML', 'input/AsciiMath', 'output/SVG'],
 						extensions: ['tex2jax.js', 'mml2jax.js', 'asciimath2jax.js'],
-						'HTML-CSS': {
-							imageFont: null
-						},
 						TeX: {
 						  extensions: ['AMSmath.js', 'AMSsymbols.js', 'noErrors.js', 'noUndefined.js']
 						}
@@ -73,7 +70,7 @@
 
 			var script = document.createElement('script');
 			script.type = 'text/javascript';
-			script.src = 'https://math.draw.io/current/MathJax.js?config=TeX-MML-AM_HTMLorMML';
+			script.src = 'https://app.diagrams.net/math/MathJax.js';
 			document.getElementsByTagName('head')[0].appendChild(script);
 		}
 	};
@@ -112,7 +109,7 @@
 					key = key.substring(1, key.length);
 				}
 				
-				key = 'https://www.draw.io/' + key;
+				key = 'https://app.diagrams.net/' + key;
 			}
 			
 			return key;
@@ -219,6 +216,10 @@
 							else if (name == 'pagenumber')
 							{
 								return 1;
+							}
+							else if (name == 'pagecount')
+							{
+								return diagrams.length;
 							}
 							
 							return graphGetGlobalVariable.apply(this, arguments);
@@ -505,7 +506,8 @@
 						try
 						{
 							// Workaround for unsupported CORS in IE9 XHR
-							var xhr = (navigator.userAgent.indexOf('MSIE 9') > 0) ? new XDomainRequest() : new XMLHttpRequest();
+							var xhr = (navigator.userAgent != null && navigator.userAgent.indexOf('MSIE 9') > 0) ?
+								new XDomainRequest() : new XMLHttpRequest();
 							xhr.open('GET', url);
 							
 						    xhr.onload = mxUtils.bind(this, function()
@@ -514,9 +516,9 @@
 						    	{
 									if (math == '1')
 									{
-										mxClient.NO_FO = true;
+										mxClient.NO_FO = mxClient.IS_SF;
 									}
-							    	
+						    		
 							    	var data = (xhr.getText != null) ? xhr.getText() : xhr.responseText;
 
 							    	if (data != null)
@@ -545,7 +547,7 @@
 							    				}
 							    			}
 							    		}
-
+							    		
 							    		if (newDocument != null && newDocument.documentElement.nodeName == 'svg')
 							    		{
 							    			var tmp = newDocument.documentElement.getAttribute('content');
@@ -572,8 +574,29 @@
 							    			
 							    			if (diagrams.length > 0)
 							    			{
-							    				data = Graph.decompress(mxUtils.getTextContent(diagrams[0]));
-							    				newDocument = mxUtils.parseXml(data);
+												var text = mxUtils.trim(mxUtils.getTextContent(diagrams[0]));
+												var node = null;
+												
+												if (text.length > 0)
+												{
+													var tmp = Graph.decompress(text);
+													
+													if (tmp != null && tmp.length > 0)
+													{
+														newDocument = mxUtils.parseXml(tmp);
+													}
+												}
+												else
+												{
+													var temp = mxUtils.getChildNodes(diagrams[0]);
+													
+													if (temp.length > 0)
+													{
+														// Creates new document for unique IDs within mxGraphModel
+														newDocument = mxUtils.createXmlDocument();
+														newDocument.appendChild(newDocument.importNode(temp[0], true));
+													}
+												}
 							    			}
 							    		}
 							    		
@@ -583,27 +606,27 @@
 							    	}
 							    	else
 							    	{
-							    		graph.container.innerHTML = 'Cannot load ' + url;
+							    		graph.container.innerHTML = 'Cannot load ' + mxUtils.htmlEntities(url);
 							    	}
 							    	
 							    	mxClient.NO_FO = originalNoFo;
 						    	}
 								catch (e)
 								{
-									graph.container.innerHTML = 'Cannot load ' + url + ': ' + e.message;
+									graph.container.innerHTML = 'Cannot load ' + mxUtils.htmlEntities(url) + ': ' + mxUtils.htmlEntities(e.message);
 								}
 						    });
 						    
 						    xhr.onerror = function()
 						    {
-						    	graph.container.innerHTML = 'Cannot load ' + url;
+						    	graph.container.innerHTML = 'Cannot load ' + mxUtils.htmlEntities(url);
 						    };
 						
 						    xhr.send();
 						}
 						catch (e)
 						{
-							graph.container.innerHTML = 'Cannot load ' + url + ': ' + e.message;
+							graph.container.innerHTML = 'Cannot load ' + mxUtils.htmlEntities(url) + ': ' + mxUtils.htmlEntities(e.message);
 						}
 					}
 					else
@@ -732,7 +755,7 @@
 							{
 								if (url != null)
 								{
-									window.open('https://www.draw.io/#U' + encodeURIComponent(url));
+									window.open('https://app.diagrams.net/#U' + encodeURIComponent(url));
 								}
 								else
 								{
@@ -748,7 +771,7 @@
 									};
 									
 									window.addEventListener('message', receive);
-									wnd = window.open('https://www.draw.io/?client=1');
+									wnd = window.open('https://app.diagrams.net/?client=1');
 								}
 							}
 							else

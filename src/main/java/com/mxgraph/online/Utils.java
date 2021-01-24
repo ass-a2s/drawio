@@ -47,6 +47,27 @@ public class Utils
 	protected static final int IO_BUFFER_SIZE = 4 * 1024;
 
 	/**
+	 * Alphabet for global unique IDs.
+	 */
+	public static final String TOKEN_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_";
+
+	/**
+	 * Returns a random string of the given length.
+	 */
+	public static String generateToken(int length)
+	{
+		StringBuffer rtn = new StringBuffer();
+
+		for (int i = 0; i < length; i++)
+		{
+			rtn.append(TOKEN_ALPHABET.charAt(
+					(int) Math.floor(Math.random() * TOKEN_ALPHABET.length())));
+		}
+
+		return rtn.toString();
+	};
+
+	/**
 	 * Applies a standard inflate algo to the input byte array
 	 * @param binary the byte array to inflate
 	 * @return the inflated String
@@ -268,6 +289,12 @@ public class Utils
 				{
 					valid = true;
 				}
+				
+				// application/svg+xml
+				if (c2 == 's' && c3 == 'v' && c4 == 'g' && c5 == ' ')
+				{
+					valid = true;
+				}
 			}
 
 			// big and little (identical) endian UTF-8 encodings, with BOM
@@ -383,7 +410,7 @@ public class Utils
 			}
 
 			// otf
-			if (c1 == 0x4F && c2 == 0x5a && c3 == 0x54 && c4 == 0x4F
+			if (c1 == 0x4F && c2 == 0x54 && c3 == 0x54 && c4 == 0x4F
 					&& c5 == 0x00)
 			{
 				valid = true;

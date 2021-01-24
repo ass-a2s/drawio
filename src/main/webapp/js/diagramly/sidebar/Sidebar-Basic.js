@@ -9,19 +9,29 @@
 		var s3 = mxConstants.STYLE_VERTICAL_LABEL_POSITION + '=bottom;' + mxConstants.STYLE_VERTICAL_ALIGN + '=top;html=1;shape=';
 		var gn = 'mxgraph.basic';
 		var dt = '';
+		this.setCurrentSearchEntryLibrary('basic');
 		
 		this.addPaletteFunctions('basic', mxResources.get('basic'), false,
 		[
-			this.createVertexTemplateEntry(s2 + 'rect;fillColor=#ffffff;fillColor2=none;strokeColor=#000000;strokeWidth=1;size=20;indent=5;', 120, 60, '', 'Partial Rectangle'),
-			this.createVertexTemplateEntry('shape=partialRectangle;whiteSpace=wrap;html=1;top=0;bottom=0;fillColor=none;', 120, 60, '', 'Partial Rectangle'),
-			this.createVertexTemplateEntry('shape=partialRectangle;whiteSpace=wrap;html=1;right=0;top=0;bottom=0;fillColor=none;routingCenterX=-0.5;', 120, 60, '', 'Partial Rectangle'),
-			this.createVertexTemplateEntry('shape=partialRectangle;whiteSpace=wrap;html=1;bottom=0;right=0;fillColor=none;', 120, 60, '', 'Partial Rectangle'),
-			this.createVertexTemplateEntry('shape=partialRectangle;whiteSpace=wrap;html=1;top=0;left=0;fillColor=none;', 120, 60, '', 'Partial Rectangle'),
+			this.createVertexTemplateEntry(s2 + 'rect;fillColor2=none;strokeWidth=1;size=20;indent=5;', w * 1.2, h * 0.6, '', 'Partial Rectangle'),
+			this.createVertexTemplateEntry('shape=partialRectangle;whiteSpace=wrap;html=1;top=0;bottom=0;fillColor=none;', w * 1.2, h * 0.6, '', 'Partial Rectangle'),
+			this.createVertexTemplateEntry('shape=partialRectangle;whiteSpace=wrap;html=1;right=0;top=0;bottom=0;fillColor=none;routingCenterX=-0.5;', w * 1.2, h * 0.6, '', 'Partial Rectangle'),
+			this.createVertexTemplateEntry('shape=partialRectangle;whiteSpace=wrap;html=1;bottom=0;right=0;fillColor=none;', w * 1.2, h * 0.6, '', 'Partial Rectangle'),
+			this.createVertexTemplateEntry('shape=partialRectangle;whiteSpace=wrap;html=1;top=0;left=0;fillColor=none;', w * 1.2, h * 0.6, '', 'Partial Rectangle'),
+			this.createVertexTemplateEntry(s2 + 'polygon;polyCoords=[[0.25,0],[0.75,0],[1,0.25],[1,0.75],[0.75,1],[0.25,1],[0,0.75],[0,0.25]];polyline=0;', w, h, '', 'Polygon', null, null, this.getTagsForStencil(gn, 'polygon', dt).join(' ')),
+			this.createVertexTemplateEntry(s2 + 'polygon;polyCoords=[[0.25,0],[0.75,0],[1,0.25],[1,0.75],[0.75,1],[0.25,1],[0,0.75],[0,0.25]];polyline=1;fillColor=none;', w, h, '', 'Polyline', null, null, this.getTagsForStencil(gn, 'polyline', dt).join(' ')),
+			this.createVertexTemplateEntry(s2 + 'patternFillRect;fillStyle=diag;step=5;fillStrokeWidth=0.2;fillStrokeColor=#dddddd;', w * 1.2, h * 0.6, '', 'Rectangle with diagonal fill'),
+			this.createVertexTemplateEntry(s2 + 'patternFillRect;fillStyle=diagRev;step=5;fillStrokeWidth=0.2;fillStrokeColor=#dddddd;', w * 1.2, h * 0.6, '', 'Rectangle with reverse diagonal fill'),
+			this.createVertexTemplateEntry(s2 + 'patternFillRect;fillStyle=vert;step=5;fillStrokeWidth=0.2;fillStrokeColor=#dddddd;', w * 1.2, h * 0.6, '', 'Rectangle with vertical fill'),
+			this.createVertexTemplateEntry(s2 + 'patternFillRect;fillStyle=hor;step=5;fillStrokeWidth=0.2;fillStrokeColor=#dddddd;', w * 1.2, h * 0.6, '', 'Rectangle with horizontal fill'),
+			this.createVertexTemplateEntry(s2 + 'patternFillRect;fillStyle=grid;step=5;fillStrokeWidth=0.2;fillStrokeColor=#dddddd;', w * 1.2, h * 0.6, '', 'Rectangle with grid fill'),
+			this.createVertexTemplateEntry(s2 + 'patternFillRect;fillStyle=diagGrid;step=5;fillStrokeWidth=0.2;fillStrokeColor=#dddddd;', w * 1.2, h * 0.6, '', 'Rectangle with diagonal grid fill'),
 			this.createVertexTemplateEntry(s2 + '4_point_star_2;dx=0.8;', w, h, '', '4 Point Star', null, null, this.getTagsForStencil(gn, '4_point_star', dt).join(' ')),
 			this.createVertexTemplateEntry(s2 + '6_point_star', w, h * 0.9, '', '6 Point Star', null, null, this.getTagsForStencil(gn, '6_point_star', dt).join(' ')),
 			this.createVertexTemplateEntry(s2 + '8_point_star', w, h, '', '8 Point Star', null, null, this.getTagsForStencil(gn, '8_point_star', dt).join(' ')),
 			this.createVertexTemplateEntry(s2 + 'banner', w, h * 0.5, '', 'Banner', null, null, this.getTagsForStencil(gn, 'banner', dt).join(' ')),
 			this.createVertexTemplateEntry(s + 'cloud_callout', w * 0.9, h * 0.6, '', 'Cloud Callout', null, null, this.getTagsForStencil(gn, 'cloud_callout', dt).join(' ')),
+			this.createVertexTemplateEntry(s + 'cloud_rect', w * 1.2, h * 0.9, '', 'Cloud Rectangle', null, null, this.getTagsForStencil(gn, 'cloud_rect', dt + ' rectangle').join(' ')),
 			this.createVertexTemplateEntry(s2 + 'cone', w, h, '', 'Cone', null, null, this.getTagsForStencil(gn, 'cone', dt).join(' ')),
 			this.createVertexTemplateEntry(s2 + 'cone2;dx=0.5;dy=0.9;', w, h, '', 'Cone (adjustable)', null, null, this.getTagsForStencil(gn, 'cone', dt).join(' ')),
 			this.createVertexTemplateEntry(s + 'document', w, h, '', 'Document', null, null, this.getTagsForStencil(gn, 'document', dt).join(' ')),
@@ -65,8 +75,12 @@
 			this.createVertexTemplateEntry(s2 + 'x', w, h, '', 'X', null, null, this.getTagsForStencil(gn, 'x', dt).join(' ')),
 			this.createVertexTemplateEntry(s2 + 'pie;startAngle=0.2;endAngle=0.9;', w, h, '', 'Pie', null, null, this.getTagsForStencil(gn, 'pie', dt).join(' ')),
 			this.createVertexTemplateEntry(s2 + 'arc;startAngle=0.3;endAngle=0.1;', w, h, '', 'Arc', null, null, this.getTagsForStencil(gn, 'arc', dt).join(' ')),
-			this.createVertexTemplateEntry(s2 + 'partConcEllipse;startAngle=0.25;endAngle=0.1;arcWidth=0.5;', w, h, '', 'Partial Concentric Ellipse', null, null, this.getTagsForStencil(gn, 'partConcEllipse', dt).join(' '))
+			this.createVertexTemplateEntry(s2 + 'partConcEllipse;startAngle=0.25;endAngle=0.1;arcWidth=0.5;', w, h, '', 'Partial Concentric Ellipse', null, null, this.getTagsForStencil(gn, 'partConcEllipse', dt).join(' ')),
+		 	this.createVertexTemplateEntry('shape=message;html=1;whiteSpace=wrap;html=1;outlineConnect=0;', 60, 40, '', 'Message', null, null, 'message mail'),
+ 		 	this.createVertexTemplateEntry('shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;lid=0;', 60, 80, '', 'Cylinder Stack', null, null, 'cylinder data database stack tube')
 		]);
+		
+		this.setCurrentSearchEntryLibrary();
 	};
 
 })();

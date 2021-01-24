@@ -3,7 +3,7 @@
  */
 /**
  * No CSS and resources available in embed mode. Parameters and docs:
- * https://desk.draw.io/solution/articles/16000042542-how-to-embed-html-
+ * https://www.diagrams.net/doc/faq/embed-html-options
  */
 GraphViewer = function(container, xmlNode, graphConfig)
 {
@@ -16,12 +16,12 @@ mxUtils.extend(GraphViewer, mxEventSource);
 /**
  * Redirects editing to absolue URLs.
  */
-GraphViewer.prototype.editBlankUrl = 'https://www.draw.io/';
+GraphViewer.prototype.editBlankUrl = 'https://app.diagrams.net/';
 
 /**
  * Base URL for relative images.
  */
-GraphViewer.prototype.imageBaseUrl = 'https://www.draw.io/';
+GraphViewer.prototype.imageBaseUrl = 'https://app.diagrams.net/';
 
 /**
  * Redirects editing to absolue URLs.
@@ -46,12 +46,28 @@ GraphViewer.prototype.toolbarZIndex = 999;
 /**
  * If automatic fit should be enabled if zoom is disabled. Default is true.
  */
-GraphViewer.prototype.autoFit = true;
+GraphViewer.prototype.autoFit = false;
+
+/**
+ * If automatic crop should be enabled when layers are toggled. Default is false.
+ */
+GraphViewer.prototype.autoCrop = false;
+
+/**
+ * If the diagram should be centered. Default is false.
+ */
+GraphViewer.prototype.center = false;
 
 /**
  * Specifies if zooming in for auto fit is allowed. Default is false.
  */
 GraphViewer.prototype.allowZoomIn = false;
+
+/**
+ * Specifies if zooming out for auto fit is allowed. Default is true.
+ * If toolbar-nohide is true then overflow content is visible.
+ */
+GraphViewer.prototype.allowZoomOut = true;
 
 /**
  * Whether the title should be shown as a tooltip if the toolbar is disabled.
@@ -76,6 +92,14 @@ GraphViewer.prototype.minHeight = 28;
 GraphViewer.prototype.minWidth = 100;
 
 /**
+ * Implements viewBox to keep the contents inside the bounding box
+ * of the container. This is currently not supported in Safari (due
+ * to clipping in labels with viewBox) and all browsers that do not
+ * support foreignObjects (eg. IE11).
+ */
+GraphViewer.prototype.responsive = false;
+
+/**
  * Initializes the viewer.
  */
 GraphViewer.prototype.init = function(container, xmlNode, graphConfig)
@@ -83,8 +107,14 @@ GraphViewer.prototype.init = function(container, xmlNode, graphConfig)
 	this.graphConfig = (graphConfig != null) ? graphConfig : {};
 	this.autoFit = (this.graphConfig['auto-fit'] != null) ?
 		this.graphConfig['auto-fit'] : this.autoFit;
+	this.autoCrop = (this.graphConfig['auto-crop'] != null) ?
+		this.graphConfig['auto-crop'] : this.autoCrop;
+	this.allowZoomOut = (this.graphConfig['allow-zoom-out'] != null) ?
+		this.graphConfig['allow-zoom-out'] : this.allowZoomOut;
 	this.allowZoomIn = (this.graphConfig['allow-zoom-in'] != null) ?
 		this.graphConfig['allow-zoom-in'] : this.allowZoomIn;
+	this.center = (this.graphConfig['center'] != null) ?
+		this.graphConfig['center'] : this.center;
 	this.checkVisibleState = (this.graphConfig['check-visible-state'] != null) ?
 		this.graphConfig['check-visible-state'] : this.checkVisibleState;
 	this.toolbarItems = (this.graphConfig.toolbar != null) ?
@@ -96,6 +126,9 @@ GraphViewer.prototype.init = function(container, xmlNode, graphConfig)
 	this.initialWidth = (container != null) ? container.style.width : null;
 	this.widthIsEmpty = (this.initialWidth != null) ? this.initialWidth == '' : true;
 	this.currentPage = parseInt(this.graphConfig.page) || 0;
+	this.responsive = ((this.graphConfig['responsive'] != null) ?
+		this.graphConfig['responsive'] : this.responsive) &&
+		!this.zoomEnabled && !mxClient.NO_FO && !mxClient.IS_SF;
 	this.pageId = this.graphConfig.pageId;
 	this.editor = null;
 
@@ -115,7 +148,47 @@ GraphViewer.prototype.init = function(container, xmlNode, graphConfig)
 			var render = mxUtils.bind(this, function()
 			{
 				this.graph = new Graph(container);
+				this.graph.defaultPageBackgroundColor = 'transparent';
 				this.graph.transparentBackground = false;
+				
+				if (this.responsive && this.graph.dialect == mxConstants.DIALECT_SVG)
+				{
+					var root = this.graph.view.getDrawPane().ownerSVGElement;
+					var canvas = this.graph.view.getCanvas();
+						
+					if (this.graphConfig.border != null)
+					{
+						root.style.padding = this.graphConfig.border + 'px';
+					}
+					else if (container.style.padding == '')
+					{
+						root.style.padding = '8px';
+					}
+					
+					root.style.boxSizing = 'border-box';
+					root.style.overflow = 'visible';
+					
+					this.graph.fit = function()
+					{
+						// Automatic
+					};
+					
+					this.graph.sizeDidChange = function()
+					{
+						var bounds = this.view.graphBounds;
+						var tr = this.view.translate;
+						
+						root.setAttribute('viewBox',
+							(bounds.x + tr.x - this.panDx) + ' ' +
+							(bounds.y + tr.y - this.panDy) + ' ' +
+							(bounds.width + 1) + ' ' +
+							(bounds.height + 1));
+						this.container.style.backgroundColor =
+							root.style.backgroundColor;
+
+						this.fireEvent(new mxEventObject(mxEvent.SIZE, 'bounds', bounds));
+					};
+				}
 				
 				if (this.graphConfig.move)
 				{
@@ -142,11 +215,17 @@ GraphViewer.prototype.init = function(container, xmlNode, graphConfig)
 				
 				if (this.graphConfig['toolbar-nohide'] == true)
 				{
-					this.editor.defaultGraphOverflow = 'visible'; 					
+					this.editor.defaultGraphOverflow = 'visible';
 				}
 				
 				//Extract graph model from html & svg formats 
 				this.xmlNode = this.editor.extractGraphModel(this.xmlNode, true);
+				
+				if (this.xmlNode != xmlNode)
+				{
+					this.xml = mxUtils.getXml(this.xmlNode);
+					this.xmlDocument = this.xmlNode.ownerDocument;
+				}
 				
 				// Handles relative images
 				var self = this;
@@ -159,13 +238,13 @@ GraphViewer.prototype.init = function(container, xmlNode, graphConfig)
 				if (mxClient.IS_SVG)
 				{
 					// LATER: Add shadow for labels in graph.container (eg. math, NO_FO), scaling
-					this.editor.graph.addSvgShadow(this.graph.view.canvas.ownerSVGElement, null, true);
+					this.graph.addSvgShadow(this.graph.view.canvas.ownerSVGElement, null, true);
 				}
 				
 				// Adds page placeholders
-				if (xmlNode.nodeName == 'mxfile')
+				if (this.xmlNode.nodeName == 'mxfile')
 				{
-					var diagrams = xmlNode.getElementsByTagName('diagram');
+					var diagrams = this.xmlNode.getElementsByTagName('diagram');
 					
 					if (diagrams.length > 0)
 					{
@@ -197,6 +276,10 @@ GraphViewer.prototype.init = function(container, xmlNode, graphConfig)
 							{
 								return self.currentPage + 1;
 							}
+							else if (name == 'pagecount')
+							{
+								return diagrams.length;
+							}
 							
 							return graphGetGlobalVariable.apply(this, arguments);
 						};
@@ -212,8 +295,7 @@ GraphViewer.prototype.init = function(container, xmlNode, graphConfig)
 						return;
 					
 					this.currentPage = mxUtils.mod(number, this.diagrams.length);
-					this.updateGraphXml(mxUtils.parseXml(Graph.decompress(mxUtils.getTextContent(
-						this.diagrams[this.currentPage]))).documentElement);
+					this.updateGraphXml(Editor.parseDiagramNode(this.diagrams[this.currentPage]));
 				};
 				
 				this.selectPageById = function(id)
@@ -261,8 +343,12 @@ GraphViewer.prototype.init = function(container, xmlNode, graphConfig)
 					urlParams['nav'] = (this.graphConfig.nav != false) ? '1' : '0';
 					
 					this.editor.setGraphXml(this.xmlNode);
-					this.graph.border = (this.graphConfig.border != null) ? this.graphConfig.border : 8;
 					this.graph.view.scale = this.graphConfig.zoom || 1;
+					
+					if (!this.responsive)
+					{
+						this.graph.border = (this.graphConfig.border != null) ? this.graphConfig.border : 8;
+					}
 				}
 				finally
 				{
@@ -270,19 +356,42 @@ GraphViewer.prototype.init = function(container, xmlNode, graphConfig)
 				}
 		
 				// Adds left-button panning only if scrollbars are visible
-				this.graph.panningHandler.useLeftButtonForPanning = true;
-				this.graph.panningHandler.isForcePanningEvent = function(me)
+				if (!this.responsive)
 				{
-					return !mxEvent.isPopupTrigger(me.getEvent()) &&
-						this.graph.container.style.overflow == 'auto';
-				};
-				this.graph.panningHandler.usePopupTrigger = false;
-				this.graph.panningHandler.pinchEnabled = false;
-				this.graph.panningHandler.ignoreCell = true;
+					this.graph.panningHandler.isForcePanningEvent = function(me)
+					{
+						return !mxEvent.isPopupTrigger(me.getEvent()) &&
+							this.graph.container.style.overflow == 'auto';
+					};
+					
+					this.graph.panningHandler.useLeftButtonForPanning = true;					
+					this.graph.panningHandler.ignoreCell = true;
+					this.graph.panningHandler.usePopupTrigger = false;
+					this.graph.panningHandler.pinchEnabled = false;
+				}
+				
 				this.graph.setPanning(false);
 		
-				this.addSizeHandler();
-				this.showLayers(this.graph);
+				if (this.graphConfig.toolbar != null)
+				{
+					this.addToolbar();
+				}
+				else if (this.graphConfig.title != null && this.showTitleAsTooltip)
+				{
+					container.setAttribute('title', this.graphConfig.title);
+				}
+				
+				if (!this.responsive)
+				{
+					this.addSizeHandler();
+				}
+
+				// Crops to visible layers if no layers toolbar button
+				if (this.showLayers(this.graph) && (!this.layersEnabled || this.autoCrop))
+				{
+					this.crop();
+				}
+
 				this.addClickHandler(this.graph);
 				this.graph.setTooltips(this.graphConfig.tooltips != false);
 				this.graph.initialViewState = {
@@ -294,15 +403,12 @@ GraphViewer.prototype.init = function(container, xmlNode, graphConfig)
 				
 				this.graph.customLinkClicked = function(href)
 				{
-					var done = true;
-					
 					if (href.substring(0, 13) == 'data:page/id,')
 					{
 						var comma = href.indexOf(',');
 						
 						if (!self.selectPageById(href.substring(comma + 1)))
 						{
-							done = false;
 							alert(mxResources.get('pageNotFound') || 'Page not found');
 						}
 					}
@@ -311,17 +417,18 @@ GraphViewer.prototype.init = function(container, xmlNode, graphConfig)
 						this.handleCustomLink(href);
 					}
 					
-					return done;
+					return true;
 				};
 				
-				if (this.graphConfig.toolbar != null)
+				// Updates origin after tree cell folding
+				var graphFoldTreeCell = this.graph.foldTreeCell;
+				
+				this.graph.foldTreeCell = mxUtils.bind(this, function()
 				{
-					this.addToolbar();
-				}
-				else if (this.graphConfig.title != null && this.showTitleAsTooltip)
-				{
-					container.setAttribute('title', this.graphConfig.title);
-				}
+					this.treeCellFolded = true;
+					
+					return graphFoldTreeCell.apply(this.graph, arguments);
+				});
 				
 				this.fireEvent(new mxEventObject('render'));
 			});
@@ -395,6 +502,9 @@ GraphViewer.prototype.getImageUrl = function(url)
  */
 GraphViewer.prototype.setXmlNode = function(xmlNode)
 {
+	//Extract graph model from html & svg formats 
+	xmlNode = this.editor.extractGraphModel(xmlNode, true);
+
 	this.xmlDocument = xmlNode.ownerDocument;
 	this.xml = mxUtils.getXml(xmlNode);
 	this.xmlNode = xmlNode;
@@ -438,19 +548,23 @@ GraphViewer.prototype.setGraphXml = function(xmlNode)
 		this.graph.view.scale = 1;
 		this.graph.getModel().clear();
 		this.editor.setGraphXml(xmlNode);
-				
-		// Restores initial CSS state
-		if (this.widthIsEmpty)
-		{
-			this.graph.container.style.width = '';
-			this.graph.container.style.height = '';
-		}
-		else
-		{
-			this.graph.container.style.width = this.initialWidth;
+
+		if (!this.responsive)
+		{				
+			// Restores initial CSS state
+			if (this.widthIsEmpty)
+			{
+				this.graph.container.style.width = '';
+				this.graph.container.style.height = '';
+			}
+			else
+			{
+				this.graph.container.style.width = this.initialWidth;
+			}
+			
+			this.positionGraph();
 		}
 		
-		this.positionGraph();
 		this.graph.initialViewState = {
 			translate: this.graph.view.translate.clone(),
 			scale: this.graph.view.scale
@@ -485,7 +599,8 @@ GraphViewer.prototype.addSizeHandler = function()
 			
 			if (this.graphConfig['toolbar-nohide'] != true)
 			{
-				if (container.offsetWidth <= tmp.width + 2 * this.graph.border * this.graph.view.scale)
+				// Shows scrollbars if graph is larger than available width
+				if (tmp.width + 2 * this.graph.border > container.offsetWidth - 2)
 				{
 					container.style.overflow = 'auto';
 				}
@@ -505,7 +620,8 @@ GraphViewer.prototype.addSizeHandler = function()
 				
 				// Workaround for position:relative set in ResizeSensor
 				var origin = mxUtils.getScrollOrigin(document.body)
-				var b = (document.body.style.position === 'relative') ? document.body.getBoundingClientRect() :
+				var b = (document.body.style.position === 'relative') ?
+					document.body.getBoundingClientRect() :
 					{left: -origin.x, top: -origin.y};
 				r = {left: r.left - b.left, top: r.top - b.top, bottom: r.bottom - b.top, right: r.right - b.left};
 				
@@ -528,6 +644,18 @@ GraphViewer.prototype.addSizeHandler = function()
 					}
 				}
 			}
+			else if (this.toolbar != null)
+			{
+				this.toolbar.style.width = Math.max(this.minToolbarWidth, container.offsetWidth) + 'px';
+			}
+
+			// Updates origin after tree cell folding
+			if (this.treeCellFolded)
+			{
+				this.treeCellFolded = false;
+				this.positionGraph(this.graph.view.translate);
+				this.graph.initialViewState.translate = this.graph.view.translate.clone();
+			}
 			
 			updatingOverflow = false;
 		}
@@ -542,33 +670,46 @@ GraphViewer.prototype.addSizeHandler = function()
 	{
 		var cachedOffsetWidth = container.offsetWidth;
 		
-		if (cachedOffsetWidth != lastOffsetWidth)
+		if (cachedOffsetWidth != lastOffsetWidth && !this.handlingResize)
 		{
-			if (!this.handlingResize)
+			this.handlingResize = true;
+			
+			// Hides scrollbars to force update of translate
+			if (container.style.overflow == 'auto')
 			{
-				this.handlingResize = true;
-
-				this.graph.maxFitScale = (maxScale != null) ? maxScale : (this.graphConfig.zoom ||
-					((this.allowZoomIn) ? null : 1));
-				this.graph.fit(null, null, null, null, false, true);
-				this.graph.maxFitScale = null;
-				
-				var tmp = this.graph.getGraphBounds();
-				this.updateContainerHeight(container, Math.max(this.minHeight, tmp.height + 2 * this.graph.border + 1));
-
-				this.graph.initialViewState = {
-					translate: this.graph.view.translate.clone(),
-					scale: this.graph.view.scale
-				};
-				
-				lastOffsetWidth = cachedOffsetWidth;
-				
-				// Workaround for fit triggering scrollbars triggering doResize (infinite loop)
-				window.setTimeout(mxUtils.bind(this, function()
-				{
-					this.handlingResize = false;
-				}), 0);
+				container.style.overflow = 'hidden';
 			}
+			
+			this.graph.maxFitScale = (maxScale != null) ? maxScale : (this.graphConfig.zoom ||
+				((this.allowZoomIn) ? null : 1));
+			this.graph.fit(null, null, null, null, null, true);
+
+			if (this.center || !(this.graphConfig.resize != false || container.style.height == ''))
+			{
+				this.graph.center();
+			}	
+			
+			this.graph.maxFitScale = null;
+			
+			if (this.graphConfig.resize != false || container.style.height == '')
+			{
+				this.updateContainerHeight(container, Math.max(this.minHeight,
+					this.graph.getGraphBounds().height +
+					2 * this.graph.border + 1));
+			}
+
+			this.graph.initialViewState = {
+				translate: this.graph.view.translate.clone(),
+				scale: this.graph.view.scale
+			};
+			
+			lastOffsetWidth = cachedOffsetWidth;
+			
+			// Workaround for fit triggering scrollbars triggering doResize (infinite loop)
+			window.setTimeout(mxUtils.bind(this, function()
+			{
+				this.handlingResize = false;
+			}), 0);
 		}
 	});
 
@@ -594,12 +735,15 @@ GraphViewer.prototype.addSizeHandler = function()
 	else
 	{
 		// Sets initial size for responsive diagram to stop at actual size
-		if (this.widthIsEmpty)
+		if (this.widthIsEmpty && !(container.style.height != '' && this.autoFit))
 		{
 			this.updateContainerWidth(container, bounds.width + 2 * this.graph.border);
 		}
 		
-		this.updateContainerHeight(container, Math.max(this.minHeight, bounds.height + 2 * this.graph.border + 1));
+		if (this.graphConfig.resize != false || container.style.height == '')
+		{
+			this.updateContainerHeight(container, Math.max(this.minHeight, bounds.height + 2 * this.graph.border + 1));
+		}
 
 		if (!this.zoomEnabled && this.autoFit)
 		{
@@ -636,7 +780,7 @@ GraphViewer.prototype.addSizeHandler = function()
 		}
 	}
 
-	var positionGraph = mxUtils.bind(this, function()
+	var positionGraph = mxUtils.bind(this, function(origin)
 	{
 		// Allocates maximum width while setting initial view state
 		var prev = container.style.minWidth;
@@ -646,23 +790,32 @@ GraphViewer.prototype.addSizeHandler = function()
 			container.style.minWidth = '100%';
 		}
 		
-		if (container.offsetWidth > 0 && (this.allowZoomIn ||
-			(bounds.width + 2 * this.graph.border > container.offsetWidth ||
-			bounds.height + 2 * this.graph.border > this.graphConfig['max-height'])))
+		var maxHeight = (this.graphConfig['max-height'] != null) ? this.graphConfig['max-height'] :
+			((container.style.height != '' && this.autoFit) ? container.offsetHeight : undefined);
+		
+		if (container.offsetWidth > 0 && origin == null && this.allowZoomOut && (this.allowZoomIn ||
+			bounds.width + 2 * this.graph.border > container.offsetWidth ||
+			bounds.height + 2 * this.graph.border > maxHeight))
 		{
 			var maxScale = null;
-			
-			if (this.graphConfig['max-height'] != null)
+
+			if (maxHeight != null && bounds.height + 2 * this.graph.border > maxHeight - 2)
 			{
-				maxScale = this.graphConfig['max-height'] / (bounds.height + 2 * this.graph.border);
+				maxScale = (maxHeight - 2 * this.graph.border - 2) / bounds.height;
 			}
 
 			this.fitGraph(maxScale);
 		}
+		else if (!this.widthIsEmpty && origin == null && !(this.graphConfig.resize != false || container.style.height == ''))
+		{
+			this.graph.center((!this.widthIsEmpty || bounds.width < this.minWidth) && this.graphConfig.resize != true);
+		}
 		else
 		{
-			this.graph.view.setTranslate(Math.floor((this.graph.border - bounds.x) / this.graph.view.scale),
-				Math.floor((this.graph.border - bounds.y) / this.graph.view.scale));
+			origin = (origin != null) ? origin : new mxPoint();
+		
+			this.graph.view.setTranslate(Math.floor(this.graph.border - bounds.x / this.graph.view.scale) + origin.x,
+				Math.floor(this.graph.border - bounds.y / this.graph.view.scale) + origin.y);
 			lastOffsetWidth = container.offsetWidth;
 		}
 		
@@ -679,12 +832,27 @@ GraphViewer.prototype.addSizeHandler = function()
 	}
 
 	// Installs function on instance
-	this.positionGraph = function()
+	this.positionGraph = function(origin)
 	{
 		bounds = this.graph.getGraphBounds();
 		lastOffsetWidth = null;
-		positionGraph();
+		positionGraph(origin);
 	};
+};
+
+/**
+ * Moves the origin of the graph to the top, right corner.
+ */
+GraphViewer.prototype.crop = function()
+{
+	var graph = this.graph;
+	var bounds = graph.getGraphBounds();
+	var border = graph.border;
+	var s = graph.view.scale;
+	var x0 = (bounds.x != null) ? Math.floor(graph.view.translate.x - bounds.x / s + border) : border;
+	var y0 = (bounds.y != null) ? Math.floor(graph.view.translate.y - bounds.y / s + border) : border;
+
+	graph.view.setTranslate(x0, y0);
 };
 
 /**
@@ -713,30 +881,39 @@ GraphViewer.prototype.updateContainerHeight = function(container, height)
 GraphViewer.prototype.showLayers = function(graph, sourceGraph)
 {
 	var layers = this.graphConfig.layers;
+	var idx = (layers != null && layers.length > 0) ? layers.split(' ') : [];
+	var layerIds = this.graphConfig.layerIds;
+	var hasLayerIds = layerIds != null && layerIds.length > 0;
+	var result = false;
 	
-	if (layers != null || sourceGraph != null)
+	if (idx.length > 0 || hasLayerIds || sourceGraph != null)
 	{
-		var idx = (layers != null) ? layers.split(' ') : null;
+		var source = (sourceGraph != null) ? sourceGraph.getModel() : null;
+		var model = graph.getModel();
+		model.beginUpdate();
 		
-		if (sourceGraph != null || idx.length > 0)
+		try
 		{
-			var source = (sourceGraph != null) ? sourceGraph.getModel() : null;
-			var model = graph.getModel();
-			model.beginUpdate();
+			var childCount = model.getChildCount(model.root);
 			
-			try
+			// Hides all layers
+			for (var i = 0; i < childCount; i++)
 			{
-				var childCount = model.getChildCount(model.root);
-				
-				// Hides all layers
-				for (var i = 0; i < childCount; i++)
+				model.setVisible(model.getChildAt(model.root, i),
+					(sourceGraph != null) ? source.isVisible(source.getChildAt(source.root, i)) : false);
+			}
+			
+			// Shows specified layers (eg. 0 1 3)
+			if (source == null)
+			{
+				if (hasLayerIds)
 				{
-					model.setVisible(model.getChildAt(model.root, i),
-						(sourceGraph != null) ? source.isVisible(source.getChildAt(source.root, i)) : false);
+					for (var i = 0; i < layerIds.length; i++)
+					{
+						model.setVisible(model.getCell(layerIds[i]), true);
+					}
 				}
-				
-				// Shows specified layers (eg. 0 1 3)
-				if (source == null)
+				else
 				{
 					for (var i = 0; i < idx.length; i++)
 					{
@@ -744,12 +921,16 @@ GraphViewer.prototype.showLayers = function(graph, sourceGraph)
 					}
 				}
 			}
-			finally
-			{
-				model.endUpdate();
-			}
 		}
+		finally
+		{
+			model.endUpdate();
+		}
+
+		result = true;
 	}
+
+	return result;
 };
 
 /**
@@ -1050,7 +1231,13 @@ GraphViewer.prototype.addToolbar = function()
 					}
 					else
 					{
-						layersDialog = this.graph.createLayersDialog();
+						layersDialog = this.graph.createLayersDialog(mxUtils.bind(this, function()
+						{
+							if (this.autoCrop)
+							{
+								this.crop();
+							}
+						}));
 						
 						mxEvent.addListener(layersDialog, 'mouseleave', function()
 						{
@@ -1121,6 +1308,7 @@ GraphViewer.prototype.addToolbar = function()
 		mxUtils.setOpacity(filename, 70);
 		
 		toolbar.appendChild(filename);
+		this.filename = filename;
 	}
 	
 	this.minToolbarWidth = buttonCount * 34;
@@ -1221,6 +1409,17 @@ GraphViewer.prototype.addToolbar = function()
 	{
 		enter();
 	}
+	
+	if (this.responsive && typeof ResizeObserver !== 'undefined')
+	{
+		new ResizeObserver(function()
+		{
+			if (toolbar.parentNode != null)
+			{
+				enter();
+			}
+		}).observe(container)
+	}
 };
 
 /**
@@ -1235,16 +1434,26 @@ GraphViewer.prototype.addClickHandler = function(graph, ui)
 		if (href == null)
 		{
 			var source = mxEvent.getSource(evt);
-		
-			if (source.nodeName.toLowerCase() == 'a')
+			
+			while (source != graph.container && source != null && href == null)
 			{
-				href = source.getAttribute('href');
+				if (source.nodeName.toLowerCase() == 'a')
+				{
+					href = source.getAttribute('href');
+				}
+				
+				source = source.parentNode;
 			}
 		}
 		
 		if (ui != null)
 		{
-			if (href != null && !(graph.isExternalProtocol(href) || graph.isBlankLink(href)))
+			if (href == null || graph.isCustomLink(href))
+			{
+				mxEvent.consume(evt);
+			}
+			else if (!graph.isExternalProtocol(href) &&
+					!graph.isBlankLink(href))
 			{
 				// Hides lightbox if any links are clicked
 				// Async handling needed for anchors to work
@@ -1258,6 +1467,8 @@ GraphViewer.prototype.addClickHandler = function(graph, ui)
 			(mxEvent.isTouchEvent(evt) || !mxEvent.isPopupTrigger(evt)) &&
 			graph.customLinkClicked(href))
 		{
+			// Workaround for text selection in Firefox on Windows
+			mxUtils.clearSelection();
 			mxEvent.consume(evt);
 		}
 	}), mxUtils.bind(this, function(evt)
@@ -1290,7 +1501,7 @@ GraphViewer.prototype.showLightbox = function(editable, closable, target)
 			closable = (closable != null) ? closable : true;
 			target = (target != null) ? target : 'blank';
 			
-			var param = {'client': 1, 'lightbox': 1, 'target': target};
+			var param = {'client': 1, 'target': target};
 		    
 			if (editable)
 			{
@@ -1341,17 +1552,14 @@ GraphViewer.prototype.showLightbox = function(editable, closable, target)
 				param.data = encodeURIComponent(this.xml);
 			}
 			
-			var domain = 'www.draw.io';
-			
 			if (urlParams['dev'] == '1')
 			{
 				param.dev = '1';
-				param.drawdev = '1';
-				domain = 'test.draw.io';
 			}
 			
-		    this.lightboxWindow = window.open('https://' + domain +
-		    		'/#P' + encodeURIComponent(JSON.stringify(param)));
+		    this.lightboxWindow = window.open(((urlParams['dev'] != '1') ?
+		    	EditorUi.lightboxHost : 'https://test.draw.io') +
+		    	'/#P' + encodeURIComponent(JSON.stringify(param)));
 		}
 	}
 	else
@@ -1412,9 +1620,12 @@ GraphViewer.prototype.showLocalLightbox = function()
 	// LATER: Make possible to assign after instance was created
 	urlParams['pages'] = '1';
 	urlParams['page'] = this.currentPage;
+	urlParams['page-id'] = this.graphConfig.pageId;
+	urlParams['layer-ids'] = (this.graphConfig.layerIds != null && this.graphConfig.layerIds.length > 0)
+														? this.graphConfig.layerIds.join(' ') : null;
 	urlParams['nav'] = (this.graphConfig.nav != false) ? '1' : '0';
 	urlParams['layers'] = (this.layersEnabled) ? '1' : '0';
-	
+
 	// PostMessage not working and Permission denied for opened access in IE9-
 	if (document.documentMode == null || document.documentMode >= 10)
 	{
@@ -1426,15 +1637,18 @@ GraphViewer.prototype.showLocalLightbox = function()
 	EditorUi.prototype.addBeforeUnloadListener = function() {};
 	EditorUi.prototype.addChromelessClickHandler = function() {};
 	
-	// Workaround for lost reference with same ID (cannot override after instance is created)
+	// Workaround for lost reference with same ID is to change
+	// ID which must be done before calling EditorUi constructor
+	var previousShadowId = Graph.prototype.shadowId;
 	Graph.prototype.shadowId = 'lightboxDropShadow';
 	
 	var ui = new EditorUi(new Editor(true), document.createElement('div'), true);
 	ui.editor.editBlankUrl = this.editBlankUrl;
 	
-	// Workaround for lost reference with same ID
-	Graph.prototype.shadowId = 'dropShadow';
-	
+	// Overrides instance variable and restores prototype state
+	ui.editor.graph.shadowId = 'lightboxDropShadow';
+	Graph.prototype.shadowId = previousShadowId;
+
 	// Disables refresh
 	ui.refresh = function() {};
 	
@@ -1579,6 +1793,23 @@ GraphViewer.prototype.showLocalLightbox = function()
 	}), 0);
 
 	return ui;
+};
+
+GraphViewer.prototype.updateTitle = function(title)
+{
+	title = title || '';
+	
+	if (this.showTitleAsTooltip && this.graph != null && this.graph.container != null)
+	{
+		this.graph.container.setAttribute('title', title);
+    }
+	
+	if (this.filename != null)
+	{
+		this.filename.innerHTML = '';
+		mxUtils.write(this.filename, title);
+		this.filename.setAttribute('title', title);
+	}
 };
 
 /**
@@ -1778,7 +2009,8 @@ GraphViewer.getUrl = function(url, onload, onerror)
 	}
 	else
 	{
-		var xhr = (navigator.userAgent.indexOf('MSIE 9') > 0) ? new XDomainRequest() : new XMLHttpRequest();
+		var xhr = (navigator.userAgent != null && navigator.userAgent.indexOf('MSIE 9') > 0) ?
+			new XDomainRequest() : new XMLHttpRequest();
 		xhr.open('GET', url);
 		
 	    xhr.onload = function()

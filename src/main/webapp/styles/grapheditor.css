@@ -7,6 +7,15 @@
 .geEditor input[type=text]::-ms-clear {
 	display: none;
 }
+.geEditor input, select, textarea, button {
+       font-size: inherit;
+}
+.geEditor input {
+       border-width: 2px;
+}
+.geEditor select {
+       border-width: 1px;
+}
 .geEditor div.mxTooltip {
 	background: whiteSmoke;
 	border-color: lightGray;
@@ -14,11 +23,14 @@
 	color: black;
 	padding:6px;
 }
-.geMenubarContainer .geItem, .geToolbar .geButton, .geToolbar .geLabel, .geSidebarContainer .geTitle {
+.geMenubarContainer .geItem, .geToolbar .geButton, .geToolbar .geLabel {
 	cursor:pointer !important;
 }
+.geSidebarContainer .geTitle {
+	cursor:default !important;
+}
 .geBackgroundPage {
-  	box-shadow:0px 0px 2px 1px #e9e9e9;
+  	box-shadow:0px 0px 2px 1px #d1d1d1;
 }
 .geSidebarContainer a, .geMenubarContainer a, .geToolbar a {
 	color:#000000;
@@ -81,28 +93,34 @@
 	color:#a94442 !important;
 	border-radius:3px;
 }
-.geStatusAlert:hover {
-	background-color:#f1d8d8;
-	border-color:#d6b2b8;
+.geStatusAlertOrange {
+	white-space:nowrap;
+	margin-top:-5px;
+	font-size:12px;
+	padding:4px 6px 4px 6px;
+	background-color:rgb(242, 147, 30);
+	border:rgb(240, 135, 5);
+	color:#000000 !important;
+	border-radius:3px;
+	opacity:0.8;
+}
+.geStatusAlertOrange:hover {
+	opacity:1;
 }
 .geStatusMessage {
 	white-space:nowrap;
 	margin-top:-5px;
 	padding:4px 6px 4px 6px;
 	font-size:12px;
-	background-image: -webkit-linear-gradient(top,#dff0d8 0,#c8e5bc 100%);
-    background-image: -o-linear-gradient(top,#dff0d8 0,#c8e5bc 100%);
-    background-image: -webkit-gradient(linear,left top,left bottom,from(#dff0d8),to(#c8e5bc));
-    background-image: linear-gradient(to bottom,#dff0d8 0,#c8e5bc 100%);
+	background: -webkit-linear-gradient(top,#dff0d8 0,#c8e5bc 100%);
+    background: -o-linear-gradient(top,#dff0d8 0,#c8e5bc 100%);
+    background: -webkit-gradient(linear,left top,left bottom,from(#dff0d8),to(#c8e5bc));
+    background: linear-gradient(to bottom,#dff0d8 0,#c8e5bc 100%);
     filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#ffdff0d8', endColorstr='#ffc8e5bc', GradientType=0);
     background-repeat: repeat-x;
     border:1px solid #b2dba1;
 	border-radius:3px;
 	color:#3c763d !important;
-}
-.geStatusMessage:hover {
-	background:#c8e5bc;
-	border-color:#b2dba1;
 }
 .geAlert {
 	position:absolute;
@@ -224,21 +242,35 @@
 	color:#188038 !important;
 }
 .geMenubarContainer, .geToolbarContainer, .geHsplit, .geVsplit {
-	background-color:#ffffff;
+	background-color:#fbfbfb;
 }
 .geMenubar {
 	padding:0px 2px 0px 2px;
 	vertical-align:middle;
 }
 .geMenubarContainer .geItem, .geToolbar .geItem {
-	padding:6px 8px 6px 8px;
+	padding:6px 6px 6px 9px;
 	cursor:default;
 }
 .geMenubarContainer .geItem:hover {
-	background: #f1f3f4;
+	background: #eee;
+	border-radius:2px;	
 }
 .geMenubarContainer .geItem:active {
-	background: #e8f0fe;
+	background: #F8C382;
+}
+.geToolbarContainer .geButton:hover {
+	opacity:1;
+	_filter:none !important;
+	background: #eee;
+	border-radius:2px;
+}
+.geToolbarContainer .geButton:active, .geToolbarContainer .geLabel:active {
+	background: #F8C382;
+}
+.geToolbarContainer .geLabel:hover {
+	background: #eee;
+	border-radius:2px;
 }
 .geToolbarButton {
 	opacity: 0.6;
@@ -251,7 +283,7 @@
 }
 .geMenubar a.geStatus {
 	color:#888888;
-	padding-left:6px;
+	padding-left:12px;
 	display:inline-block;
 	cursor:default !important;
 }
@@ -270,7 +302,7 @@
 	overflow:hidden;
 }
 .geToolbar {
-	padding:1px 0px 0px 4px;
+	padding:1px 0px 0px 6px;
 	border-top:1px solid #dadce0;
 	-webkit-box-shadow: inset 0 1px 0 0 #fff;
 	-moz-box-shadow: inset 0 1px 0 0 #fff;
@@ -297,14 +329,6 @@
 	opacity:0.6;
 	_filter:alpha(opacity=60);
 }
-.geToolbarContainer .geButton:hover {
-	opacity:1;
-	_filter:none !important;
-	background: #f1f3f4;
-}
-.geToolbarContainer .geButton:active {
-	background: #e8f0fe;
-}
 div.mxWindow .geButton {
 	margin: -1px 2px 2px 2px;
 	padding: 1px 2px 2px 1px;
@@ -315,18 +339,6 @@ div.mxWindow .geButton {
 	cursor:pointer;
 	padding:3px 5px 3px 5px;
 	border:1px solid transparent;
-	opacity:0.6;
-	filter:alpha(opacity=60);
-}
-.geToolbarContainer .geLabel:hover {
-	background: #f1f3f4;
-	opacity:0.9;
-	filter:alpha(opacity=90) !important;
-}
-.geToolbarContainer .geLabel:active {
-	background: #e8f0fe;
-	opacity:1;
-	filter:none !important;
 }
 .geToolbarContainer .mxDisabled:hover {
 	border:1px solid transparent !important;
@@ -337,7 +349,7 @@ div.mxWindow .geButton {
 	background-color: #f8f9fa;
 }
 .geSidebarContainer {
-	background:#ffffff;
+	background:#fbfbfb;
 	overflow:hidden;
 	position:absolute;
 	overflow:auto;
@@ -348,9 +360,11 @@ div.mxWindow .geButton {
 }
 .geSidebar {
 	border-bottom:1px solid #e5e5e5;
-	padding:8px;
-	_padding:4px;
-	padding-bottom:12px;
+	padding:6px;
+	padding-left:10px;
+	_padding:2px;
+	_padding-left:6px;
+	padding-bottom:6px;
 	overflow:hidden;
 }
 .geSidebarContainer .geTitle {
@@ -367,16 +381,20 @@ div.mxWindow .geButton {
 	line-height:1.4em;
 }
 .geSidebarContainer .geTitle:hover {
-	background-color:#f1f3f4;
+	background: #eee;
+	border-radius:2px;
+}
+.geSidebarContainer .geTitle:active {
+	background-color:#F8C382;
 }
 .geSidebarContainer .geDropTarget {
 	border-radius:10px;
-	border:2px dotted #e5e5e5;
+	border:2px dotted #b0b0b0;
 	text-align:center;
 	padding:6px;
 	margin:6px;
-	color:#d0d0d0;
-	fontSize:13px;
+	color:#a0a0a0;
+	font-size:13px;
 }
 .geTitle img {
 	opacity:0.5;
@@ -398,10 +416,10 @@ div.mxWindow .geButton {
 	display:inline-block;
 	background-repeat:no-repeat;
 	background-position:50% 50%;
-	cursor: move;
+	border-radius: 8px;
 }
 .geSidebar .geItem:hover {
-	background-color:#f1f3f4;
+	background-color:#e0e0e0;
 }
 .geItem {
 	vertical-align: top;
@@ -409,7 +427,7 @@ div.mxWindow .geButton {
 }
 .geSidebarTooltip {
 	position:absolute;
-	background:white;
+	background:#fbfbfb;
 	overflow:hidden;
 	box-shadow:0 2px 6px 2px rgba(60,64,67,.15);
 	border-radius:6px;
@@ -464,7 +482,7 @@ div.mxWindow .geButton {
 	border-bottom:1px solid #e5e5e5;
 }
 .geHsplit:hover, .geVsplit:hover {
-	background-color:#f1f3f4;
+	background-color:#e0e0e0;
 }
 .geDialog {
 	position:absolute;
@@ -534,24 +552,32 @@ div.mxWindow .geButton {
 .geBigButton {
 	color:#ffffff;
 	border: none;
-	padding:10px;
-	font-size:14pt;
+	padding:4px 10px;
+	font-size:14px;
 	white-space: nowrap;
-	border-radius:6px;
-	text-shadow: rgb(41, 89, 137) 0px 1px 0px;
-	background-color:#428bca;
-	background-image:linear-gradient(rgb(70, 135, 206) 0px, rgb(48, 104, 162) 100%);
-	-webkit-box-shadow: rgba(255, 255, 255, 0.0980392) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.2) 0px 1px 1px 0px;
-	-moz-box-shadow: rgba(255, 255, 255, 0.0980392) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.2) 0px 1px 1px 0px;
-	box-shadow: rgba(255, 255, 255, 0.0980392) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.2) 0px 1px 1px 0px;
+	border-radius:3px;
+	background-color:#0052cc;
+	cursor:pointer;
+	transition: background-color 0.1s ease-out;
+	overflow:hidden;
+	text-overflow: ellipsis;
 }
 .geBigButton:hover {
-	background-color:#2d6ca2;
-	background-image: linear-gradient(rgb(90, 148, 211) 0px, rgb(54, 115, 181) 100%);
+	background-color:#0065ff;
 }
 .geBigButton:active {
-	background-color: rgb(54, 115, 181);
-	background-image: none;
+	background-color:#0747a6;
+}
+html body .geBigStandardButton {
+	color: #344563;
+	background-color: rgba(9, 30, 66, 0.08);
+}
+html body .geBigStandardButton:hover {
+	background-color: rgba(9, 30, 66, 0.13);
+}
+html body .geBigStandardButton:active {
+	background-color: #F8C382;
+	color: #600000;
 }
 @media print {
 	div.geNoPrint { display: none !important; }
@@ -687,6 +713,18 @@ div.mxWindow .geButton {
 .geSprite-horizontalelbow { background-position: 0 -5903px; }
 .geSprite-horizontalisometric { background-position: 0 -5949px; }
 .geSprite-verticalisometric { background-position: 0 -5995px; }
+.geSvgSprite {
+	background-position: center center;
+}
+.geFlipSprite {
+	transform:scaleX(-1);
+}
+.geSprite-box {
+	background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='10' transform='translate(0.5,0.5)'><rect stroke='black' fill='none' x='2' y='2' width='6' height='6'/><path stroke='black' d='M8 5 L 18 5'/></svg>");
+}
+.geSprite-halfCircle {
+	background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='10' transform='translate(0.5,0.5)'><path stroke='black' fill='none' d='M 2 2 Q 6 2 6 5 Q 6 8 2 8 M 6 5 L 18 5'/></svg>");
+}
 html div.mxRubberband {
 	border-color:#0000DD;
 	background:#99ccff;
@@ -748,6 +786,9 @@ html td.mxWindowTitle {
  	font-size:12px;
  	color:rgb(112, 112, 112);
  	padding:4px;
+}
+table.geProperties tr td {
+	height:21px;
 }
 .gePropHeader, .gePropRow {
 	border: 1px solid #e9e9e9;	
@@ -1432,4 +1473,73 @@ html td.mxWindowTitle {
 	position: absolute;
 	top: 5px;
 	right: 5px;
+}
+
+.geAspectDlgListItem 
+{
+	width : 120px;
+	height : 120px;
+	display : inline-block;
+	border: 3px solid #F0F0F0;
+	border-radius: 5px;
+	padding: 5px;
+	margin : 2px 2px 20px 2px;
+}
+
+.geAspectDlgListItem:hover
+{
+	border: 3px solid #c5c5c5;
+}
+
+.geAspectDlgListItemSelected 
+{
+	border: 3px solid #3b73af;
+}
+
+.geAspectDlgListItemSelected:hover
+{
+	border: 3px solid #405a86;
+}
+
+.geAspectDlgListItemText
+{
+	text-overflow: ellipsis;
+	max-width: 100%;
+	min-height : 2em;
+	overflow : hidden;
+	text-align : center;
+	margin-top : 10px;
+}
+
+.geAspectDlgList
+{
+	min-height: 184px;
+	white-space: nowrap;
+}
+
+.geStripedTable
+{
+	border-collapse: collapse;
+ 	width: 100%;
+ 	table-layout: fixed;
+}
+
+.geStripedTable td, .geStripedTable th
+{
+	border: 1px solid #ddd;
+	text-align: left;
+	padding: 2px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.geStripedTable tr:nth-child(odd){background-color: #f2f2f2;}
+
+.geStripedTable tr:hover {background-color: #ddd;}
+
+.geStripedTable th {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  background-color: #bbb;
 }

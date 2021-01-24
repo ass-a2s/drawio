@@ -15,7 +15,7 @@ var com;
              * @class
              */
             var mxVsdxCodec = (function () {
-                function mxVsdxCodec() {
+                function mxVsdxCodec(editorUi) {
                     this.RESPONSE_END = "</mxfile>";
                     this.RESPONSE_DIAGRAM_START = "";
                     this.RESPONSE_DIAGRAM_END = "</diagram>";
@@ -44,6 +44,7 @@ var com;
                      */
                     this.debugPaths = false;
                     this.vsdxModel = null;
+                    this.editorUi = editorUi;
                 }
                 mxVsdxCodec.vsdxPlaceholder_$LI$ = function ()
                 {
@@ -150,6 +151,13 @@ var com;
                     }
                 };
                 
+                mxVsdxCodec.incorrectXMLReqExp = [
+                	{
+                		regExp: /(\>[^&<]*)\&([^&<;]*\<)/g,
+                		repl: '$1&amp;$2'
+                	}
+                ];
+                
                 /**
                  * Parses the input VSDX format and uses the information to populate
                  * the specified graph.
@@ -189,34 +197,60 @@ var com;
 	                    {
 	                        var array122 = (function (m) { if (m.entries == null)
 	                            m.entries = []; return m.entries; })(pages);
-	                        var _loop_1 = function (index121) {
+	                        var _loop_1 = function (index121, remaining) {
 	                            var entry = array122[index121];
 	                            {
 	                                var page_1 = entry.getValue();
-	                                if (!page_1.isBackground()) {
+	                                //As per many requests, include all pages in the output
+	                                //if (!page_1.isBackground()) 
+	                                {
 	                                    var graph_1 = this_1.createMxGraph();
 	                                    graph_1.getModel().beginUpdate();
-	                                    this_1.importPage(page_1, graph_1, graph_1.getDefaultParent());
+	                                    this_1.importPage(page_1, graph_1, graph_1.getDefaultParent(), true);
 	                                    this_1.scaleGraph(graph_1, page_1.getPageScale() / page_1.getDrawingScale());
 	                                    graph_1.getModel().endUpdate();
-	                                    /* append */ (function (sb) { return sb.str = sb.str.concat(_this.RESPONSE_DIAGRAM_START); })(xmlBuilder);
-	                                    /* append */ (function (sb) { return sb.str = sb.str.concat(_this.processPage(graph_1, page_1)); })(xmlBuilder);
-	                                    /* append */ (function (sb) { return sb.str = sb.str.concat(_this.RESPONSE_DIAGRAM_END); })(xmlBuilder);
+
+	                                    this_1.postImportPage(page_1, graph_1, function()
+	                                    {
+	                                    	this_1.sanitiseGraph(graph_1);
+		                                    /* append */ (function (sb) { return sb.str = sb.str.concat(_this.RESPONSE_DIAGRAM_START); })(xmlBuilder);
+		                                    /* append */ (function (sb) { return sb.str = sb.str.concat(_this.processPage(graph_1, page_1)); })(xmlBuilder);
+		                                    /* append */ (function (sb) { return sb.str = sb.str.concat(_this.RESPONSE_DIAGRAM_END); })(xmlBuilder);
+		                                    
+		                                    if (index121 < array122.length - 1)
+		                                	{
+		    	                            	_loop_1(index121 + 1, remaining);
+		                                	}
+		    	                            else
+		                                	{
+		    	                            	remaining();
+		                                	}
+	                                    });
 	                                }
 	                            }
 	                        };
 	                        var this_1 = _this;
-	                        for (var index121 = 0; index121 < array122.length; index121++) {
-	                            _loop_1(index121);
+	                        
+	                        if (array122.length > 0)
+                        	{
+	                        	_loop_1(0, remaining);
+                        	}
+	                        else
+	                        {
+	                        	remaining();
 	                        }
 	                    }
-	                    /* append */ (function (sb) { return sb.str = sb.str.concat(_this.RESPONSE_END); })(xmlBuilder);
-	                    var dateAfter = new Date();
-                       	//console.log("File processed in " + (dateAfter - dateBefore) + "ms");
-	                    //console.log(xmlBuilder.str);
-	                    if (callback) 
+	                    
+	                    function remaining()
 	                    {
-                     		callback(xmlBuilder.str);
+		                    /* append */ (function (sb) { return sb.str = sb.str.concat(_this.RESPONSE_END); })(xmlBuilder);
+		                    var dateAfter = new Date();
+	                       	//console.log("File processed in " + (dateAfter - dateBefore) + "ms");
+		                    //console.log(xmlBuilder.str);
+		                    if (callback) 
+		                    {
+	                     		callback(xmlBuilder.str);
+		                    }
 	                    }
                     };
 
@@ -271,7 +305,7 @@ var com;
 	        					var filename = zipEntry.name;
 	                        	var name = filename.toLowerCase();
 	        					var nameLen = name.length;
-	                            if (name.indexOf('.xml') == nameLen - 4 || name.indexOf('.xml.rels') == nameLen - 9) //xml files
+	                            if (name.indexOf('.xml') == nameLen - 4 || name.indexOf('.rels') == nameLen - 5) //xml files
 	                            {
 	                            	filesCount++;
 	        	                    zipEntry.async("string").then(function (str) 
@@ -291,6 +325,18 @@ var com;
 	                                        	if (str.charCodeAt(1) === 0 && str.charCodeAt(3) === 0 && str.charCodeAt(5) === 0)
                                         		{
 	                                        		doc = mxVsdxCodec.parseXml(mxVsdxCodec.decodeUTF16LE(str));
+                                        		}
+	                                        	else
+                                        		{
+	                                        		for (var r = 0; r < mxVsdxCodec.incorrectXMLReqExp.length; r++)
+                                        			{
+	                                        			if (mxVsdxCodec.incorrectXMLReqExp[r].regExp.test(str))
+                                        				{
+	                                        				str = str.replace(mxVsdxCodec.incorrectXMLReqExp[r].regExp, mxVsdxCodec.incorrectXMLReqExp[r].repl);
+                                        				}
+                                        			}
+	                                        		
+	                                        		doc = mxVsdxCodec.parseXml(str);
                                         		}
 	                                        	//TODO add any other non-standard encoding that may be needed 
 	                                        }
@@ -325,10 +371,13 @@ var com;
 	                            				//send to emf conversion service
 	                        					var formData = new FormData();
 	                        					formData.append('img', emfBlob, name);
-
+	                        					formData.append('inputformat', 'emf');
+	                        					formData.append('outputformat', 'png');
+	                        					
 	                        					var xhr = new XMLHttpRequest();
 	                        					xhr.open('POST', EMF_CONVERT_URL);
 	                        					xhr.responseType = 'blob';
+	                        					_this.editorUi.addRemoteServiceSecurityCheck(xhr);
 	                        					
 	                        					xhr.onreadystatechange = mxUtils.bind(this, function()
 	                        					{
@@ -340,8 +389,10 @@ var com;
 	                        								{
 	                        									var reader = new FileReader();
 	                        									reader.readAsDataURL(xhr.response); 
-	                        									reader.onloadend = function() {
-	                        									    mediaData[filename] = reader.result.substr(22); //data:image/png;base64, is 23 character
+	                        									reader.onloadend = function() 
+	                        									{
+	                        										var dataPos = reader.result.indexOf(',') + 1;
+	                        									    mediaData[filename] = reader.result.substr(dataPos);
 		                        									emfDone();
 	                        									}
 	                        								}
@@ -453,8 +504,8 @@ var com;
                     if (page != null) {
                         //var pageName_1 = org.apache.commons.lang3.StringEscapeUtils.escapeXml11(page.getPageName());
                     	//TODO FIXME htmlEntities is not exactly as escapeXml11 but close
-                        var pageName_1 = mxUtils.htmlEntities(page.getPageName());
-                        output += '<diagram name="' + pageName_1 + '" id="' + pageName_1 + '">';
+                        var pageName_1 = mxUtils.htmlEntities(page.getPageName()) + (page.isBackground()? ' (Background)' : '');
+                        output += '<diagram name="' + pageName_1 + '" id="' + pageName_1.replace(/\s/g, '_') + '">';
                     }
                     
                     output += Graph.compress(modelString);
@@ -566,7 +617,7 @@ var com;
                  * @param {*} parent The parent of the elements to be imported.
                  * @return {number}
                  */
-                mxVsdxCodec.prototype.importPage = function (page, graph, parent) 
+                mxVsdxCodec.prototype.importPage = function (page, graph, parent, noSanitize) 
                 {
                 	//BackPages can include another backPage, so it is recursive
                 	var backPage = page.getBackPage();
@@ -579,32 +630,73 @@ var com;
                         this.importPage(backPage, graph, graph.getDefaultParent());
                     }
                 	
+                	//TODO KNOWN ISSUE: VSDX layers are virtual grouping where parts of a group can be members of a layers while the remaining group members belong to another layer
+                	//					This cannot be done in draw.io currently
+                	//					Also, layers should NOT affect cells order. So, as a best effort solution, layers should be orders such that the cells order is maintained
+                	
                 	//add page layers
                 	var layers = page.getLayers();
                 	this.layersMap[0] = graph.getDefaultParent();
-                	
-                	if (layers.length > 1)
-            		{
-                		for (var k = 1; k < layers.length; k++)
-	            		{
-                			var layer = layers[k];
-                			var layerCell = new mxCell();		
-                			layerCell.setVisible(layer.Visible == 1);
-
-                			if (layer.Lock == 1)
-                			{
-                				layerCell.setStyle("locked=1;");
-                			}
-                			
-                			//TODO handlle color and other properties
-                			layerCell.setValue(layer.Name);
-                			
-                			this.layersMap[k] = layerCell;
-                    		graph.addCell(layerCell, graph.model.root, k);
-	            		}
-            		}
-                	//add shapes
+                	var layersOrder = {}, lastOrder = 0, lastLayer = null;
                     var shapes = page.getShapes();
+					
+					try
+					{
+						//Trying to determine layers order
+						for (var k = 0; shapes.entries != null && k < shapes.entries.length; k++)
+						{
+							var layer = shapes.entries[k].getValue().layerMember;
+							
+							if (layer != null)
+							{
+								if (lastLayer == null)
+								{
+									layersOrder[layer] = lastOrder;
+									lastLayer = layer;
+								}
+								else if (lastLayer != layer && layersOrder[layer] == null)
+								{
+									lastOrder++;
+									layersOrder[layer] = lastOrder;
+									lastLayer = layer;
+								}
+							}
+						}
+					}
+					catch(e)
+					{
+						console.log('VSDX Import: Failed to detect layers order');
+					}
+
+            		for (var k = 0; k < layers.length; k++)
+            		{
+            			var layer = layers[k];
+            			var layerIndex = layersOrder[k] != null? layersOrder[k] : k;
+
+            			if (layerIndex == 0)
+            			{
+            				var layerCell = graph.getDefaultParent();
+            			}
+            			else
+            			{
+            				var layerCell = new mxCell();
+            				graph.addCell(layerCell, graph.model.root, layerIndex);
+            			}
+            			
+            			layerCell.setVisible(layer.Visible == 1);
+
+            			if (layer.Lock == 1)
+            			{
+            				layerCell.setStyle("locked=1;");
+            			}
+            			
+            			//TODO handlle color and other properties
+            			layerCell.setValue(layer.Name);
+            			
+            			this.layersMap[k] = layerCell;
+            		}
+
+                	//add shapes
                     var entries = (function (a) { var i = 0; return { next: function () { return i < a.length ? a[i++] : null; }, hasNext: function () { return i < a.length; } }; })(/* entrySet */ (function (m) { if (m.entries == null)
                         m.entries = []; return m.entries; })(shapes));
                     var pageHeight = page.getPageDimensions().y;
@@ -644,9 +736,117 @@ var com;
                         }
                     }
                     ;
-                    this.sanitiseGraph(graph);
+                    if (!noSanitize)
+                    {
+                        this.sanitiseGraph(graph);
+                    }
+
                     return pageHeight;
                 };
+                
+                /**
+                 * This function is for doing any async processing needed after importing a page
+                 */
+                mxVsdxCodec.prototype.postImportPage = function(page, graph, callback)
+                {
+                	try
+                	{
+                		var me = this;
+                		var toCropImgs = [];
+	                	var shapes = page.getShapes().entries || [];
+	                	
+	                	for (var i = 0; i < shapes.length; i++)
+	            		{
+	                		var shape = shapes[i].value || {};
+	                		
+	                		if (shape.toBeCroppedImg)
+	                		{
+	                			toCropImgs.push(shape);
+	                		}
+	            		}
+	                	
+	                	if (toCropImgs.length > 0)
+                		{
+	                		function cropImage(index, callback)
+	                		{
+	                			function next()
+	                			{
+	                				if (index < toCropImgs.length - 1)
+	                				{
+		                				cropImage(index + 1, callback);
+	                				}
+		                			else
+	                				{
+		                				callback();
+	                				}
+	                			};
+	                			
+	                			var shape = toCropImgs[index];
+	                			var imgInfo = shape.toBeCroppedImg;
+	                			
+	                			var cell = (function (m, k) { if (m.entries == null)
+	                                m.entries = []; for (var i = 0; i < m.entries.length; i++)
+	                                if (m.entries[i].key.equals != null && m.entries[i].key.equals(k) || m.entries[i].key === k) {
+	                                    return m.entries[i].value;
+	                                } return null; })(me.vertexMap, new com.mxgraph.io.vsdx.ShapePageId(page.Id, shape.Id));
+	                            
+	                			var img = new Image();
+	                			
+	                			img.onload = function()
+	                			{
+	                				var data = imgInfo.iData;
+                                    var type = imgInfo.iType;
+                                    
+	                				try
+		                			{
+                                        //TODO There is still some minor inaccuracy in width/height
+                                        var scaleX = img.width / imgInfo.imgWidth;
+                                        var scaleY = img.height / imgInfo.imgHeight;
+		                				var offsetX = (-imgInfo.imgOffsetX) * scaleX;
+		                				var offsetY = (imgInfo.imgHeight - imgInfo.height + imgInfo.imgOffsetY) * scaleY;
+		                			    var c = document.createElement("canvas");
+		                			    c.width = imgInfo.width * scaleX;
+		                              	c.height = imgInfo.height * scaleY;
+                                        var ctx = c.getContext("2d");
+                                        ctx.fillStyle = "#FFFFFF";
+                                        ctx.fillRect(0, 0, c.width, c.height);
+                                        ctx.drawImage(img, offsetX, offsetY, c.width, c.height, 0, 0, c.width, c.height);
+		                            	var jpgData = c.toDataURL("image/jpeg");
+	                                    data = jpgData.substr(23); //23 is the length of "data:image/jpeg;base64,"
+                                        type = 'jpg';
+		                			}
+	                				catch(e) 
+	                				{
+	                					console.log(e);
+	                				}
+	                				
+	                				cell.style += ';image=data:image/' + type + ',' + data;
+	                			    next();
+	                			};
+	                			
+	                			img.src = 'data:image/' + imgInfo.iType + ';base64,' + imgInfo.iData;
+
+	                			img.onerror = function()
+	                			{
+	                				cell.style += ';image=data:image/' + imgInfo.iType + ',' + imgInfo.iData;
+	                				next();
+	                			}
+	                		};
+	                		
+	                		cropImage(0, callback);
+                		}
+	                	else
+                		{
+	                		callback();
+	                	}
+                	}
+                	catch(e)
+                	{
+                        console.log(e);
+                        callback();
+                	}
+                };
+                
                 /**
                  * Adds a vertex to the graph if 'shape' is a vertex or add the shape to edgeShapeMap if it is an edge.
                  * This method doesn't import sub-shapes of 'shape'.
@@ -1229,7 +1429,7 @@ var com;
                         var child = model.getChildAt(cell, i);
                         var remove = this.sanitiseCell(graph, child);
                         if (remove) {
-                            /* add */ (removeList.push(child) > 0);
+                            /* add */ (removeList.push(child));
                         }
                     }
                     ;
@@ -1239,6 +1439,27 @@ var com;
                             model.remove(removeChild);
                         }
                     }
+                    
+                    //Check for -ve width/height cells and correct it
+                    var geo = cell.geometry;
+                    
+                    if (geo != null)
+                	{
+                    	if (geo.height < 0)
+                		{
+                    		geo.height = Math.abs(geo.height);
+                    		geo.y -= geo.height;
+                    		cell.style += ';flipV=1;';
+                		}
+
+                    	if (geo.width < 0)
+                		{
+                    		geo.width = Math.abs(geo.width);
+                    		geo.x -= geo.width;
+                    		cell.style += ';flipH=1;';
+                		}
+                	}
+                    
                     if (childCount > 0) {
                         childCount = model.getChildCount(cell);
                     }
@@ -1265,12 +1486,13 @@ var com;
         (function (io) {
             var mxVssxCodec = (function (_super) {
                 __extends(mxVssxCodec, _super);
-                function mxVssxCodec() {
+                function mxVssxCodec(editorUi) {
                     var _this = _super.call(this) || this;
                     _this.RESPONSE_END = "";
                     _this.RESPONSE_DIAGRAM_START = "";
                     _this.RESPONSE_DIAGRAM_END = "";
                     _this.RESPONSE_HEADER = "";
+                    _this.editorUi = editorUi;
                     return _this;
                 }
                 mxVssxCodec.prototype.decodeVssx = function (file, callback, charset, onerror) {
@@ -1292,8 +1514,6 @@ var com;
                                     var master = array129[index128];
                                     {
                                         var shapeGraph = this_1.createMxGraph();
-                                        var shapeElem = master.getMasterShape().getShape();
-                                        var shape = new com.mxgraph.io.vsdx.VsdxShape(page, shapeElem, !page.isEdge(shapeElem), masterShapes, null, this_1.vsdxModel);
                                         
                                         var scale = 1;
                                         
@@ -1316,34 +1536,46 @@ var com;
                                         	 
                                         	 scale = pScaleV / dScaleV;
                                     	}
+
+                                        var hasCells = false;
                                         
-                                        var cell = null;
-                                        if (shape.isVertex()) {
-                                            /* clear */ this_1.edgeShapeMap.entries = [];
-                                            /* clear */ this_1.parentsMap.entries = [];
-                                            cell = this_1.addShape(shapeGraph, shape, shapeGraph.getDefaultParent(), 0, 1169);
-                                            {
-                                                var array131 = (function (m) { if (m.entries == null)
-                                                    m.entries = []; return m.entries; })(this_1.edgeShapeMap);
-                                                for (var index130 = 0; index130 < array131.length; index130++) {
-                                                    var edgeEntry = array131[index130];
-                                                    {
-                                                        var parent_1 = (function (m, k) { if (m.entries == null)
-                                                            m.entries = []; for (var i = 0; i < m.entries.length; i++)
-                                                            if (m.entries[i].key.equals != null && m.entries[i].key.equals(k) || m.entries[i].key === k) {
-                                                                return m.entries[i].value;
-                                                            } return null; })(this_1.parentsMap, edgeEntry.getKey());
-                                                        this_1.addUnconnectedEdge(shapeGraph, parent_1, edgeEntry.getValue(), 1169);
-                                                    }
-                                                }
-                                            }
+                                        for (var chI = 0; master.firstLevelShapes != null && chI < master.firstLevelShapes.length; chI++)
+                                        {
+	                                        var shapeElem = master.firstLevelShapes[chI].getShape();
+	                                        var shape = new com.mxgraph.io.vsdx.VsdxShape(page, shapeElem, !page.isEdge(shapeElem), masterShapes, null, this_1.vsdxModel);
+	
+	                                        var cell = null;
+	                                        if (shape.isVertex()) {
+	                                            /* clear */ this_1.edgeShapeMap.entries = [];
+	                                            /* clear */ this_1.parentsMap.entries = [];
+	                                            cell = this_1.addShape(shapeGraph, shape, shapeGraph.getDefaultParent(), 0, 1169);
+	                                            {
+	                                                var array131 = (function (m) { if (m.entries == null)
+	                                                    m.entries = []; return m.entries; })(this_1.edgeShapeMap);
+	                                                for (var index130 = 0; index130 < array131.length; index130++) {
+	                                                    var edgeEntry = array131[index130];
+	                                                    {
+	                                                        var parent_1 = (function (m, k) { if (m.entries == null)
+	                                                            m.entries = []; for (var i = 0; i < m.entries.length; i++)
+	                                                            if (m.entries[i].key.equals != null && m.entries[i].key.equals(k) || m.entries[i].key === k) {
+	                                                                return m.entries[i].value;
+	                                                            } return null; })(this_1.parentsMap, edgeEntry.getKey());
+	                                                        this_1.addUnconnectedEdge(shapeGraph, parent_1, edgeEntry.getValue(), 1169);
+	                                                    }
+	                                                }
+	                                            }
+	                                        }
+	                                        else {
+	                                            cell = this_1.addUnconnectedEdge(shapeGraph, null, shape, 1169);
+	                                        }
+	                                        
+	                                        hasCells |= (cell != null);
                                         }
-                                        else {
-                                            cell = this_1.addUnconnectedEdge(shapeGraph, null, shape, 1169);
-                                        }
-                                        if (cell != null) {
+                                        
+                                        if (hasCells) 
+                                        {
                                         	this_1.scaleGraph(shapeGraph, scale);
-                                            var geo_1 = this_1.normalizeGeo(cell);
+                                        	var size = this_1.normalizeGraph(shapeGraph);
                                             this_1.sanitiseGraph(shapeGraph);
                                             if (shapeGraph.getModel().getChildCount(shapeGraph.getDefaultParent()) === 0)
                                                 return "continue";
@@ -1352,16 +1584,16 @@ var com;
                                             var shapeXML_1 = _super.prototype.processPage.call(this_1, shapeGraph, null);
                                             /* append */ (function (sb) { return sb.str = sb.str.concat(shapeXML_1); })(shapes_1);
                                             /* append */ (function (sb) { return sb.str = sb.str.concat("\",\"w\":"); })(shapes_1);
-                                            /* append */ (function (sb) { return sb.str = sb.str.concat(geo_1.width); })(shapes_1);
+                                            /* append */ (function (sb) { return sb.str = sb.str.concat(size.width); })(shapes_1);
                                             /* append */ (function (sb) { return sb.str = sb.str.concat(",\"h\":"); })(shapes_1);
-                                            /* append */ (function (sb) { return sb.str = sb.str.concat(geo_1.height); })(shapes_1);
+                                            /* append */ (function (sb) { return sb.str = sb.str.concat(size.height); })(shapes_1);
                                             /* append */ (function (sb) { return sb.str = sb.str.concat(",\"title\":"); })(shapes_1);
                                             var shapeName_1 = master.getName();
                                             if (shapeName_1 == null)
                                         	{
                                             	shapeName_1 = "";
                                         	}
-                                            shapeName_1 = JSON.stringify(mxUtils.htmlEntities(shapeName_1));
+                                            shapeName_1 = mxUtils.htmlEntities(JSON.stringify(shapeName_1));
                                             /* append */ (function (sb) { return sb.str = sb.str.concat(shapeName_1); })(shapes_1);
                                             /* append */ (function (sb) { return sb.str = sb.str.concat("}"); })(shapes_1);
                                             comma_1 = ",";
@@ -1417,6 +1649,86 @@ var com;
                     }
                     return geo;
                 };
+                
+                mxVssxCodec.prototype.normalizeGraph = function (graph) 
+                {
+                	//Find minX/Y, maxX/Y
+                	var minX, minY, maxX, maxY;
+
+                	function getDimMinMax(pt)
+                	{
+                		if (pt != null)
+                		{
+                			if (minX == null)
+	            			{
+	                			minX = pt.x; minY = pt.y; maxX = pt.x + (pt.width || 0); maxY = pt.y + (pt.height || 0);
+	            			}
+	                		else
+                			{
+	                			minX = Math.min(pt.x, minX);
+	                			minY = Math.min(pt.y, minY);
+	                			maxX = Math.max(pt.x + (pt.width || 0), maxX);
+	                			maxY = Math.max(pt.y + (pt.height || 0), maxY);
+                			}
+                		}
+                	};
+                	
+                	for (var id in graph.model.cells)
+            		{
+                		var cell = graph.model.cells[id];
+                		var geo = cell.geometry;
+                		
+                		if (geo != null && cell.parent.id == 1)
+                		{
+                			if (cell.vertex)
+                			{
+                				getDimMinMax(geo);
+                			}
+                			else
+            				{
+                				getDimMinMax(geo.sourcePoint);
+							    getDimMinMax(geo.targetPoint);
+							    var points = geo.points;
+							    
+							    for (var i = 0; points != null && i < points.length; i++) 
+								{
+							        getDimMinMax(points[i]);   
+							    }
+            				}
+                		}
+            		}
+                	
+                	//Remove minX, minY from all geo and fix edges also
+                	var srcP = {x: minX, y: minY};
+                	
+                	for (var id in graph.model.cells)
+            		{
+                		var cell = graph.model.cells[id];
+                		var geo = cell.geometry;
+                		
+                		if (geo != null && cell.parent.id == 1)
+                		{
+	                		geo.x -= minX;
+	                		geo.y -= minY;
+                	
+	                		if (cell.isEdge())
+	            			{
+		                        this.transPoint(geo.sourcePoint, srcP);
+	                			this.transPoint(geo.targetPoint, srcP);
+		                        this.transPoint(geo.offset, srcP);
+		                        var points = geo.points;
+		                        
+	                            for (var i = 0; points != null && i < points.length; i++) 
+	                            {
+	                                this.transPoint(points[i], srcP);
+	                            }
+	            			}
+                		}
+            		}
+
+                	return {width: maxX - minX, height: maxY - minY}
+                };
+                
                 mxVssxCodec.prototype.transPoint = function (p, srcP) {
                     if (p != null) {
                         p.x = (p.x - srcP.x);
@@ -2196,7 +2508,7 @@ var com;
                         if (this.rows == null) {
                             this.rows = ([]);
                             for (var i = 0; i < rowElems.length; i++) {
-                                /* add */ (this.rows.push(null) > 0);
+                                /* add */ (this.rows.push(null));
                             }
                             ;
                         }
@@ -2256,7 +2568,7 @@ var com;
                             {
                                 var row = com.mxgraph.io.vsdx.geometry.RowFactory.getRowObj(rowElem, this.rows);
                                 if (row.getIndex() > rowsLen) {
-                                    /* add */ (this.rows.push(row) > 0);
+                                    /* add */ (this.rows.push(row));
                                     sortNeeded = true;
                                 }
                                 else {
@@ -2308,7 +2620,12 @@ var com;
                         var _loop_1 = function (index124) {
                             var row = this_1.rows[index124];
                             {
-                                /* append */ (function (sb) { return sb.str = sb.str.concat(row.handle(p, shape)); })(geomElemParsed);
+                                /* append */ 
+                            	(function (sb) 
+                                {
+                            		//Some files has null rows
+                                	return sb.str = sb.str.concat(row != null? row.handle(p, shape) : ''); 
+                                })(geomElemParsed);
                             }
                         };
                         var this_1 = this;
@@ -2333,7 +2650,11 @@ var com;
                          * @return {number}
                          */
                         mxVsdxGeometry$0.prototype.compare = function (r1, r2) {
-                            return r1.getIndex() - r2.getIndex();
+                        	//Some files has null rows
+                        	var r1i = r1 != null? r1.getIndex() : 0;
+                        	var r2i = r2 != null? r2.getIndex() : 0;
+                        	
+                            return r1i - r2i;
                         };
                         return mxVsdxGeometry$0;
                     }());
@@ -2367,7 +2688,7 @@ var com;
                             /* set */ (this.geomList[geo.getIndex()] = geo);
                         }
                         else {
-                            /* add */ (this.geomList.push(geo) > 0);
+                            /* add */ (this.geomList.push(geo));
                             this.sortNeeded = true;
                         }
                     };
@@ -2441,7 +2762,7 @@ var com;
                     mxVsdxGeometryList.prototype.getRoutingPoints = function (parentHeight, startPoint, rotation) {
                         this.sort();
                         var points = ([]);
-                        /* add */ (points.push(startPoint.clone()) > 0);
+                        /* add */ (points.push(startPoint.clone()));
                         var offsetX = 0;
                         var offsetY = 0;
                         for (var index128 = 0; index128 < this.geomList.length; index128++) {
@@ -2473,7 +2794,7 @@ var com;
                                                 y = Math.round(y * 100.0) / 100.0;
                                                 p.x = (x);
                                                 p.y = (y);
-                                                /* add */ (points.push(p) > 0);
+                                                /* add */ (points.push(p));
                                             }
                                         }
                                     }
@@ -2499,6 +2820,14 @@ var com;
                         return parsedGeom.str;
                     };
                     /*private*/ mxVsdxGeometryList.prototype.processGeo = function (shape, p, parsedGeom, lastGeoStyle, withFill) {
+                    	var rounding = shape.getRounding();
+                    	var roundingStr = '';
+                        
+                        if (rounding > 0)
+                    	{
+                        	roundingStr = ' rounded="1" arcSize="' + (rounding * com.mxgraph.io.vsdx.mxVsdxUtils.conversionFactor) + '" ';
+                    	}
+                        
                         var _loop_2 = function (index130) {
                             var geo = this_2.geomList[index130];
                             {
@@ -2508,12 +2837,12 @@ var com;
                                 if (!(str_1.length === 0)) {
                                     var geoStyle = this_2.getGeoStyle(geo);
                                     if (lastGeoStyle === -1) {
-                                        /* append */ (function (sb) { return sb.str = sb.str.concat("<path>"); })(parsedGeom);
+                                        /* append */ (function (sb) { return sb.str = sb.str.concat("<path" + roundingStr + ">"); })(parsedGeom);
                                         /* append */ (function (sb) { return sb.str = sb.str.concat(str_1); })(parsedGeom);
                                     }
                                     else if (lastGeoStyle !== geoStyle) {
                                         this_2.closePath(parsedGeom, lastGeoStyle);
-                                        /* append */ (function (sb) { return sb.str = sb.str.concat("<path>"); })(parsedGeom);
+                                        /* append */ (function (sb) { return sb.str = sb.str.concat("<path" + roundingStr + ">"); })(parsedGeom);
                                         /* append */ (function (sb) { return sb.str = sb.str.concat(str_1); })(parsedGeom);
                                     }
                                     else {
@@ -2670,7 +2999,13 @@ var com;
                      * @param {*} shapeElem
                      * @param {com.mxgraph.io.vsdx.mxVsdxModel} model
                      */
-                    mxVsdxMaster.prototype.processMasterShape = function (shapeElem, model) {
+                    mxVsdxMaster.prototype.processMasterShape = function (shapeElem, model, internal) 
+                    {
+                    	if (!internal) 
+                		{
+                    		this.firstLevelShapes = [];
+                		}
+                    	
                         var shapeChild = shapeElem.firstChild;
                         while ((shapeChild != null)) {
                             if ((shapeChild != null && (shapeChild.nodeType == 1)) && (function (o1, o2) { if (o1 && o1.equals) {
@@ -2692,13 +3027,36 @@ var com;
                                         var masterShape = new com.mxgraph.io.vsdx.Shape(shape, model);
                                         this.masterShape = (this.masterShape == null) ? masterShape : this.masterShape;
                                         /* put */ (this.childShapes[shapeId] = masterShape);
-                                        this.processMasterShape(shape, model);
+                                        
+                                        if (!internal) 
+                                		{
+                                    		this.firstLevelShapes.push(masterShape);
+                                		}
+                                        
+                                        this.processMasterShape(shape, model, true);
                                     }
                                     shapesChild = shapesChild.nextSibling;
                                 }
                                 ;
-                                break;
                             }
+                            else if (shapeChild != null && shapeChild.nodeType == 1 && shapeChild.nodeName == "Connects") 
+                            {
+                            	this.connects = {};
+                                var connectsChild = shapeChild.firstChild;
+                                
+                                while (connectsChild != null) 
+                                {
+                                    if (connectsChild != null && connectsChild.nodeType == 1 && connectsChild.nodeName == "Connect") 
+                                    {
+                                        var connectElem = connectsChild;
+                                        var connect = new com.mxgraph.io.vsdx.mxVsdxConnect(connectElem);
+                                        this.connects[connect.getFromSheet()] = connect;
+                                    }
+                                    
+                                    connectsChild = connectsChild.nextSibling;
+                                }
+                            }
+                            
                             shapeChild = shapeChild.nextSibling;
                         }
                         ;
@@ -3298,7 +3656,9 @@ var com;
                                     else {
                                         return o1 === o2;
                                     } })(masterId, "")) {
-                                        elem = masterTmp.getSubShape(masterId).getShape();
+                                    	var subShape = masterTmp.getSubShape(masterId)
+                                    	//Some files has non-existing master sub-shapes
+                                        elem = subShape != null? subShape.getShape() : elem;
                                     }
                                     isEdge = this.isEdge(elem);
                                 }
@@ -3765,7 +4125,7 @@ var com;
                                                         for (var index136 = 0; index136 < fillStyleElems.length; index136++) {
                                                             var fillStyle = fillStyleElems[index136];
                                                             {
-                                                                /* add */ (this.connFillStyles.push(com.mxgraph.io.vsdx.theme.FillStyleFactory.getFillStyle(fillStyle)) > 0);
+                                                                /* add */ (this.connFillStyles.push(com.mxgraph.io.vsdx.theme.FillStyleFactory.getFillStyle(fillStyle)));
                                                             }
                                                         }
                                                         break;
@@ -3774,7 +4134,7 @@ var com;
                                                         for (var index137 = 0; index137 < lineStyleElems.length; index137++) {
                                                             var lineStyle = lineStyleElems[index137];
                                                             {
-                                                                /* add */ (this.connLineStyles.push(new com.mxgraph.io.vsdx.theme.LineStyle(lineStyle)) > 0);
+                                                                /* add */ (this.connLineStyles.push(new com.mxgraph.io.vsdx.theme.LineStyle(lineStyle)));
                                                             }
                                                         }
                                                         break;
@@ -3794,7 +4154,7 @@ var com;
                                                         for (var index139 = 0; index139 < connStylesElems.length; index139++) {
                                                             var connStyle = connStylesElems[index139];
                                                             {
-                                                                /* add */ (this.connLineStylesExt.push(new com.mxgraph.io.vsdx.theme.LineStyleExt(connStyle)) > 0);
+                                                                /* add */ (this.connLineStylesExt.push(new com.mxgraph.io.vsdx.theme.LineStyleExt(connStyle)));
                                                             }
                                                         }
                                                         break;
@@ -3803,7 +4163,7 @@ var com;
                                                         for (var index140 = 0; index140 < schemeStyleElems.length; index140++) {
                                                             var schemeStyle = schemeStyleElems[index140];
                                                             {
-                                                                /* add */ (this.lineStylesExt.push(new com.mxgraph.io.vsdx.theme.LineStyleExt(schemeStyle)) > 0);
+                                                                /* add */ (this.lineStylesExt.push(new com.mxgraph.io.vsdx.theme.LineStyleExt(schemeStyle)));
                                                             }
                                                         }
                                                         break;
@@ -3860,10 +4220,10 @@ var com;
                         for (var index144 = 0; index144 < fontProps.length; index144++) {
                             var fontProp = fontProps[index144];
                             {
-                                /* add */ (fontStyles.push(com.mxgraph.io.vsdx.mxVsdxUtils.getIntAttr$org_w3c_dom_Element$java_lang_String(fontProp, "style")) > 0);
+                                /* add */ (fontStyles.push(com.mxgraph.io.vsdx.mxVsdxUtils.getIntAttr$org_w3c_dom_Element$java_lang_String(fontProp, "style")));
                                 var color = com.mxgraph.io.vsdx.mxVsdxUtils.getDirectFirstChildElement(fontProp);
                                 if (color != null)
-                                    (fontColors.push(com.mxgraph.io.vsdx.theme.OoxmlColorFactory.getOoxmlColor(com.mxgraph.io.vsdx.mxVsdxUtils.getDirectFirstChildElement(color))) > 0);
+                                    (fontColors.push(com.mxgraph.io.vsdx.theme.OoxmlColorFactory.getOoxmlColor(com.mxgraph.io.vsdx.mxVsdxUtils.getDirectFirstChildElement(color))));
                             }
                         }
                     };
@@ -3879,7 +4239,7 @@ var com;
                                         for (var index146 = 0; index146 < fillStyleElems.length; index146++) {
                                             var fillStyle = fillStyleElems[index146];
                                             {
-                                                /* add */ (this.fillStyles.push(com.mxgraph.io.vsdx.theme.FillStyleFactory.getFillStyle(fillStyle)) > 0);
+                                                /* add */ (this.fillStyles.push(com.mxgraph.io.vsdx.theme.FillStyleFactory.getFillStyle(fillStyle)));
                                             }
                                         }
                                         break;
@@ -3888,7 +4248,7 @@ var com;
                                         for (var index147 = 0; index147 < lineStyleElems.length; index147++) {
                                             var lineStyle = lineStyleElems[index147];
                                             {
-                                                /* add */ (this.lineStyles.push(new com.mxgraph.io.vsdx.theme.LineStyle(lineStyle)) > 0);
+                                                /* add */ (this.lineStyles.push(new com.mxgraph.io.vsdx.theme.LineStyle(lineStyle)));
                                             }
                                         }
                                         break;
@@ -4082,8 +4442,28 @@ var com;
                             }
                         }
                         var styleVariation = quickStyleVals.getQuickStyleVariation();
-                        if (retColor != null && (styleVariation & 8) > 0) {
-                            retColor = this.getLineColor$com_mxgraph_io_vsdx_theme_QuickStyleVals(quickStyleVals);
+                        
+                        //TODO This is the best efforts of interpreting the documentation and also this article https://visualsignals.typepad.co.uk/vislog/2013/05/visio-2013-themes-in-the-shapesheet-part-2.html
+                        if (retColor != null && (styleVariation & 8) > 0) 
+                        {
+                        	var bkgHSLClr = this.getStyleColor(8).toHsl();
+                        	var lineClr = this.getLineColor$com_mxgraph_io_vsdx_theme_QuickStyleVals(quickStyleVals);
+                        	var lineHSLClr = lineClr.toHsl();
+                            var fillHSLClr = retColor.toHsl();
+                            
+                            
+                            if (Math.abs(bkgHSLClr.getLum() - fillHSLClr.getLum()) >= 0.1666) 
+                            {
+                            	//nothing
+                            }
+                            else if (bkgHSLClr.getLum() <= 0.7292) 
+                            {
+                            	retColor = new com.mxgraph.io.vsdx.theme.Color(255, 255, 255);
+                            }
+                            else if (Math.abs(bkgHSLClr.getLum() - lineHSLClr.getLum()) > Math.abs(bkgHSLClr.getLum() - fillHSLClr.getLum()))
+                        	{
+                            	retColor = lineClr;
+                        	}
                         }
                         return retColor;
                     };
@@ -4161,8 +4541,27 @@ var com;
                             lineClr = this.getStyleColor(lineColorStyle);
                         }
                         var styleVariation = quickStyleVals.getQuickStyleVariation();
-                        if ((styleVariation & 4) > 0) {
-                            lineClr = this.getFillColor$com_mxgraph_io_vsdx_theme_QuickStyleVals(quickStyleVals);
+                        
+                        //TODO This is the best efforts of interpreting the documentation and also this article https://visualsignals.typepad.co.uk/vislog/2013/05/visio-2013-themes-in-the-shapesheet-part-2.html
+                        if ((styleVariation & 4) > 0) 
+                        {
+                        	var bkgHSLClr = this.getStyleColor(8).toHsl();
+                        	var fillColor = this.getFillColor$com_mxgraph_io_vsdx_theme_QuickStyleVals(quickStyleVals);
+                            var fillHSLClr = fillColor.toHsl();
+                            var lineHSLClr = lineClr.toHsl();
+                            
+                            if (Math.abs(bkgHSLClr.getLum() - lineHSLClr.getLum()) >= 0.1666) 
+                            {
+                            	//nothing
+                            }
+                            else if (bkgHSLClr.getLum() <= 0.7292) 
+                            {
+                            	lineClr = new com.mxgraph.io.vsdx.theme.Color(255, 255, 255);
+                            }
+                            else if (Math.abs(bkgHSLClr.getLum() - fillHSLClr.getLum()) > Math.abs(bkgHSLClr.getLum() - lineHSLClr.getLum()))
+                        	{
+                            	lineClr = fillColor;
+                        	}
                         }
                         return lineClr;
                     };
@@ -4295,18 +4694,43 @@ var com;
                             txtColor = this.getStyleColor(fontColorStyle);
                         }
                         var styleVariation = quickStyleVals.getQuickStyleVariation();
-                        if ((styleVariation & 2) > 0) {
-                            var fillColor = this.getFillColor$com_mxgraph_io_vsdx_theme_QuickStyleVals(quickStyleVals);
+                        
+                        //TODO This is the best efforts of interpreting the documentation and also this article https://visualsignals.typepad.co.uk/vislog/2013/05/visio-2013-themes-in-the-shapesheet-part-2.html
+                        if ((styleVariation & 2) > 0) 
+                        {
+                        	var bkgHSLClr = this.getStyleColor(8).toHsl();
+                        	var txtHSLClr = txtColor.toHsl();
+                        	var fillColor = this.getFillColor$com_mxgraph_io_vsdx_theme_QuickStyleVals(quickStyleVals);
                             var fillHSLClr = fillColor.toHsl();
                             var lineClr = this.getLineColor$com_mxgraph_io_vsdx_theme_QuickStyleVals(quickStyleVals);
                             var lineHSLClr = lineClr.toHsl();
-                            if (fillHSLClr.getLum() < lineHSLClr.getLum()) {
-                                txtColor = fillColor;
+                            
+                            if (Math.abs(bkgHSLClr.getLum() - txtHSLClr.getLum()) >= 0.1666) 
+                            {
+                            	//nothing
                             }
-                            else {
-                                txtColor = lineClr;
+                            else if (bkgHSLClr.getLum() <= 0.7292) 
+                            {
+                            	txtColor = new com.mxgraph.io.vsdx.theme.Color(255, 255, 255);
                             }
+                            else
+                        	{
+                            	var lineDiff = Math.abs(bkgHSLClr.getLum() - lineHSLClr.getLum());
+                            	var fillDiff = Math.abs(bkgHSLClr.getLum() - fillHSLClr.getLum());
+                            	var txtDiff = Math.abs(bkgHSLClr.getLum() - txtHSLClr.getLum());
+                            	var max = Math.max(lineDiff, fillDiff, txtDiff);
+                            	
+                            	if (max == lineDiff)
+                        		{
+                            		txtColor = lineClr;
+                        		}
+                            	else if (max == fillDiff)
+                        		{
+                            		txtColor = fillColor;
+                        		}
+                        	}
                         }
+                        
                         return txtColor;
                     };
                     mxVsdxTheme.prototype.getFontColor = function (quickStyleVals, fontColors) {
@@ -4402,7 +4826,7 @@ var com;
                             else {
                                 return o1 === o2;
                             } })(name, child.nodeName)) {
-                                /* add */ (result.push(child) > 0);
+                                /* add */ (result.push(child));
                             }
                         }
                         ;
@@ -4417,7 +4841,7 @@ var com;
                         var result = ([]);
                         for (var child = parent.firstChild; child != null; child = child.nextSibling) {
                             if (child != null && (child.nodeType == 1)) {
-                                /* add */ (result.push(child) > 0);
+                                /* add */ (result.push(child));
                             }
                         }
                         ;
@@ -4603,20 +5027,19 @@ var com;
                         return styleMap;
                     };
                     mxVsdxUtils.isInsideTriangle = function (x, y, ax, ay, bx, by, cx, cy) {
-                        bx = bx - ax;
-                        by = by - ay;
-                        cx = cx - ax;
-                        cy = cy - ay;
-                        ax = 0;
-                        ay = 0;
-                        var d = bx * cy - cx * by;
-                        var wa = (x * (by - cy) + y * (cx - bx) + bx * cy - cx * by) / d;
-                        var wb = (x * cy - y * cx) / d;
-                        var wc = (y * bx - x * by) / d;
-                        if (wa > 0 && wa < 1 && wb > 0 && wb < 1 && wc > 0 && wc < 1) {
-                            return true;
-                        }
-                        return false;
+						function sign (p1x, p1y, p2x, p2y, p3x, p3y)
+						{
+						    return (p1x - p3x) * (p2y - p3y) - (p2x - p3x) * (p1y - p3y);
+						}
+
+					    var d1 = sign(x, y, ax, ay, bx, by);
+					    var d2 = sign(x, y, bx, by, cx, cy);
+					    var d3 = sign(x, y, cx, cy, ax, ay);
+					
+					    var has_neg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+					    var has_pos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+					
+					    return !(has_neg && has_pos);
                     };
                     return mxVsdxUtils;
                 }());
@@ -4650,17 +5073,17 @@ var com;
                         this.fields = null;
                         this.paraIndex = null;
                         this.values = ([]);
-                        /* add */ (this.values.push(val) > 0);
+                        /* add */ (this.values.push(val));
                         this.charIndices = ([]);
-                        /* add */ (this.charIndices.push(ch) > 0);
+                        /* add */ (this.charIndices.push(ch));
                         this.fields = ([]);
-                        /* add */ (this.fields.push(field) > 0);
+                        /* add */ (this.fields.push(field));
                         this.paraIndex = pg;
                     }
                     Paragraph.prototype.addText = function (val, ch, field) {
-                        /* add */ (this.values.push(val) > 0);
-                        /* add */ (this.charIndices.push(ch) > 0);
-                        /* add */ (this.fields.push(field) > 0);
+                        /* add */ (this.values.push(val));
+                        /* add */ (this.charIndices.push(ch));
+                        /* add */ (this.fields.push(field));
                     };
                     Paragraph.prototype.getParagraphIndex = function () {
                         return this.paraIndex;
@@ -5292,37 +5715,37 @@ var com;
                                                             break;
                                                         case "sysDot":
                                                         case "dot":
-                                                            /* add */ (_this.lineDashPattern.push(1.0) > 0);
-                                                            /* add */ (_this.lineDashPattern.push(4.0) > 0);
+                                                            /* add */ (_this.lineDashPattern.push(1.0));
+                                                            /* add */ (_this.lineDashPattern.push(4.0));
                                                             break;
                                                         case "sysDash":
                                                         case "dash":
                                                             break;
                                                         case "lgDash":
-                                                            /* add */ (_this.lineDashPattern.push(12.0) > 0);
-                                                            /* add */ (_this.lineDashPattern.push(4.0) > 0);
+                                                            /* add */ (_this.lineDashPattern.push(12.0));
+                                                            /* add */ (_this.lineDashPattern.push(4.0));
                                                             break;
                                                         case "sysDashDot":
                                                         case "dashDot":
-                                                            /* add */ (_this.lineDashPattern.push(8.0) > 0);
-                                                            /* add */ (_this.lineDashPattern.push(4.0) > 0);
-                                                            /* add */ (_this.lineDashPattern.push(1.0) > 0);
-                                                            /* add */ (_this.lineDashPattern.push(4.0) > 0);
+                                                            /* add */ (_this.lineDashPattern.push(8.0));
+                                                            /* add */ (_this.lineDashPattern.push(4.0));
+                                                            /* add */ (_this.lineDashPattern.push(1.0));
+                                                            /* add */ (_this.lineDashPattern.push(4.0));
                                                             break;
                                                         case "lgDashDot":
-                                                            /* add */ (_this.lineDashPattern.push(12.0) > 0);
-                                                            /* add */ (_this.lineDashPattern.push(4.0) > 0);
-                                                            /* add */ (_this.lineDashPattern.push(1.0) > 0);
-                                                            /* add */ (_this.lineDashPattern.push(4.0) > 0);
+                                                            /* add */ (_this.lineDashPattern.push(12.0));
+                                                            /* add */ (_this.lineDashPattern.push(4.0));
+                                                            /* add */ (_this.lineDashPattern.push(1.0));
+                                                            /* add */ (_this.lineDashPattern.push(4.0));
                                                             break;
                                                         case "sysDashDotDot":
                                                         case "lgDashDotDot":
-                                                            /* add */ (_this.lineDashPattern.push(12.0) > 0);
-                                                            /* add */ (_this.lineDashPattern.push(4.0) > 0);
-                                                            /* add */ (_this.lineDashPattern.push(1.0) > 0);
-                                                            /* add */ (_this.lineDashPattern.push(4.0) > 0);
-                                                            /* add */ (_this.lineDashPattern.push(1.0) > 0);
-                                                            /* add */ (_this.lineDashPattern.push(4.0) > 0);
+                                                            /* add */ (_this.lineDashPattern.push(12.0));
+                                                            /* add */ (_this.lineDashPattern.push(4.0));
+                                                            /* add */ (_this.lineDashPattern.push(1.0));
+                                                            /* add */ (_this.lineDashPattern.push(4.0));
+                                                            /* add */ (_this.lineDashPattern.push(1.0));
+                                                            /* add */ (_this.lineDashPattern.push(4.0));
                                                             break;
                                                     }
                                                     break;
@@ -5334,8 +5757,8 @@ var com;
                                                         {
                                                             var dashLen = com.mxgraph.io.vsdx.mxVsdxUtils.getIntAttr$org_w3c_dom_Element$java_lang_String(dsElem, "d");
                                                             var spaceLen = com.mxgraph.io.vsdx.mxVsdxUtils.getIntAttr$org_w3c_dom_Element$java_lang_String(dsElem, "sp");
-                                                            /* add */ (_this.lineDashPattern.push(dashLen / 10000.0) > 0);
-                                                            /* add */ (_this.lineDashPattern.push(spaceLen / 10000.0) > 0);
+                                                            /* add */ (_this.lineDashPattern.push(dashLen / 10000.0));
+                                                            /* add */ (_this.lineDashPattern.push(spaceLen / 10000.0));
                                                         }
                                                     }
                                                     break;
@@ -6300,7 +6723,8 @@ var com;
                                 var sweep = (x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1);
                                 var sf = (sweep > 0) ? "0" : "1";
                                 var laf = "0";
-                                if (com.mxgraph.io.vsdx.mxVsdxUtils.isInsideTriangle(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y) && this.isReflexAngle(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y)) {
+                                if (com.mxgraph.io.vsdx.mxVsdxUtils.isInsideTriangle(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y)) // && this.isReflexAngle(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y)) { //Inside triangle works alone in all test cases so far 
+								{
                                     laf = "1";
                                 }
                                 shape.setLastX(x);
@@ -6554,13 +6978,13 @@ var com;
                                         var nut = ([]);
                                         var nurbsize = nurbs.getSize();
                                         for (var i = 0; i < nurbsize - 1; i = i + 3) {
-                                            /* add */ (cp1.push(new mxPoint(nurbs.getX(i), nurbs.getY(i))) > 0);
-                                            /* add */ (cp2.push(new mxPoint(nurbs.getX(i + 1), nurbs.getY(i + 1))) > 0);
+                                            /* add */ (cp1.push(new mxPoint(nurbs.getX(i), nurbs.getY(i))));
+                                            /* add */ (cp2.push(new mxPoint(nurbs.getX(i + 1), nurbs.getY(i + 1))));
                                             if (i < nurbsize - 2) {
-                                                /* add */ (nut.push(new mxPoint(nurbs.getX(i + 2), nurbs.getY(i + 2))) > 0);
+                                                /* add */ (nut.push(new mxPoint(nurbs.getX(i + 2), nurbs.getY(i + 2))));
                                             }
                                             else {
-                                                /* add */ (nut.push(new mxPoint(x, y)) > 0);
+                                                /* add */ (nut.push(new mxPoint(x, y)));
                                             }
                                         }
                                         ;
@@ -6597,13 +7021,13 @@ var com;
                                 var n = s.split(/\s*,\s*/).slice(0);
                                 for (var i = 0; i < n.length; i++) {
                                     if ((i > 3) && (i % 4 === 0)) {
-                                        /* add */ (this.nurbsValues.push(/* parseDouble */ parseFloat(/* get */ n[i]) * 100.0) > 0);
+                                        /* add */ (this.nurbsValues.push(/* parseDouble */ parseFloat(/* get */ n[i]) * 100.0));
                                     }
                                     else if ((i > 3) && (i % 4 === 1)) {
-                                        /* add */ (this.nurbsValues.push(100 - parseFloat(/* get */ n[i]) * 100.0) > 0);
+                                        /* add */ (this.nurbsValues.push(100 - parseFloat(/* get */ n[i]) * 100.0));
                                     }
                                     else {
-                                        /* add */ (this.nurbsValues.push(/* parseDouble */ parseFloat(/* get */ n[i])) > 0);
+                                        /* add */ (this.nurbsValues.push(/* parseDouble */ parseFloat(/* get */ n[i])));
                                     }
                                 }
                                 ;
@@ -7957,141 +8381,141 @@ var com;
                         Style.lineDashPatterns = ([]); return Style.lineDashPatterns; };
                     ;
                     Style.__static_initializer_1 = function () {
-                        /* add */ (Style.lineDashPatterns_$LI$().push([]) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push([]) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push([]) > 0);
+                        /* add */ (Style.lineDashPatterns_$LI$().push([]));
+                        /* add */ (Style.lineDashPatterns_$LI$().push([]));
+                        /* add */ (Style.lineDashPatterns_$LI$().push([]));
                         var lineDashPattern = ([]);
-                        /* add */ (lineDashPattern.push(Style.DOT) > 0);
-                        /* add */ (lineDashPattern.push(Style.SPACE) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern) > 0);
+                        /* add */ (lineDashPattern.push(Style.DOT));
+                        /* add */ (lineDashPattern.push(Style.SPACE));
+                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern));
                         lineDashPattern = ([]);
-                        /* add */ (lineDashPattern.push(Style.DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.DOT) > 0);
-                        /* add */ (lineDashPattern.push(Style.SPACE) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern) > 0);
+                        /* add */ (lineDashPattern.push(Style.DASH));
+                        /* add */ (lineDashPattern.push(Style.SPACE));
+                        /* add */ (lineDashPattern.push(Style.DOT));
+                        /* add */ (lineDashPattern.push(Style.SPACE));
+                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern));
                         lineDashPattern = ([]);
-                        /* add */ (lineDashPattern.push(Style.DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.DOT) > 0);
-                        /* add */ (lineDashPattern.push(Style.SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.DOT) > 0);
-                        /* add */ (lineDashPattern.push(Style.SPACE) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern) > 0);
+                        /* add */ (lineDashPattern.push(Style.DASH));
+                        /* add */ (lineDashPattern.push(Style.SPACE));
+                        /* add */ (lineDashPattern.push(Style.DOT));
+                        /* add */ (lineDashPattern.push(Style.SPACE));
+                        /* add */ (lineDashPattern.push(Style.DOT));
+                        /* add */ (lineDashPattern.push(Style.SPACE));
+                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern));
                         lineDashPattern = ([]);
-                        /* add */ (lineDashPattern.push(Style.DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.DOT) > 0);
-                        /* add */ (lineDashPattern.push(Style.SPACE) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern) > 0);
+                        /* add */ (lineDashPattern.push(Style.DASH));
+                        /* add */ (lineDashPattern.push(Style.SPACE));
+                        /* add */ (lineDashPattern.push(Style.DASH));
+                        /* add */ (lineDashPattern.push(Style.SPACE));
+                        /* add */ (lineDashPattern.push(Style.DOT));
+                        /* add */ (lineDashPattern.push(Style.SPACE));
+                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern));
                         lineDashPattern = ([]);
-                        /* add */ (lineDashPattern.push(Style.LONG_DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.SPACE) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern) > 0);
+                        /* add */ (lineDashPattern.push(Style.LONG_DASH));
+                        /* add */ (lineDashPattern.push(Style.SPACE));
+                        /* add */ (lineDashPattern.push(Style.SHORT_DASH));
+                        /* add */ (lineDashPattern.push(Style.SPACE));
+                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern));
                         lineDashPattern = ([]);
-                        /* add */ (lineDashPattern.push(Style.LONG_DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.SPACE) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern) > 0);
+                        /* add */ (lineDashPattern.push(Style.LONG_DASH));
+                        /* add */ (lineDashPattern.push(Style.SPACE));
+                        /* add */ (lineDashPattern.push(Style.SHORT_DASH));
+                        /* add */ (lineDashPattern.push(Style.SPACE));
+                        /* add */ (lineDashPattern.push(Style.SHORT_DASH));
+                        /* add */ (lineDashPattern.push(Style.SPACE));
+                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern));
                         lineDashPattern = ([]);
-                        /* add */ (lineDashPattern.push(Style.SHORT_DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern) > 0);
+                        /* add */ (lineDashPattern.push(Style.SHORT_DASH));
+                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE));
+                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern));
                         lineDashPattern = ([]);
-                        /* add */ (lineDashPattern.push(Style.DOT) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern) > 0);
+                        /* add */ (lineDashPattern.push(Style.DOT));
+                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE));
+                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern));
                         lineDashPattern = ([]);
-                        /* add */ (lineDashPattern.push(Style.SHORT_DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.DOT) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern) > 0);
+                        /* add */ (lineDashPattern.push(Style.SHORT_DASH));
+                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE));
+                        /* add */ (lineDashPattern.push(Style.DOT));
+                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE));
+                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern));
                         lineDashPattern = ([]);
-                        /* add */ (lineDashPattern.push(Style.SHORT_DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.DOT) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.DOT) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern) > 0);
+                        /* add */ (lineDashPattern.push(Style.SHORT_DASH));
+                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE));
+                        /* add */ (lineDashPattern.push(Style.DOT));
+                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE));
+                        /* add */ (lineDashPattern.push(Style.DOT));
+                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE));
+                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern));
                         lineDashPattern = ([]);
-                        /* add */ (lineDashPattern.push(Style.SHORT_DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.DOT) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern) > 0);
+                        /* add */ (lineDashPattern.push(Style.SHORT_DASH));
+                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE));
+                        /* add */ (lineDashPattern.push(Style.SHORT_DASH));
+                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE));
+                        /* add */ (lineDashPattern.push(Style.DOT));
+                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE));
+                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern));
                         lineDashPattern = ([]);
-                        /* add */ (lineDashPattern.push(Style.DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern) > 0);
+                        /* add */ (lineDashPattern.push(Style.DASH));
+                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE));
+                        /* add */ (lineDashPattern.push(Style.SHORT_DASH));
+                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE));
+                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern));
                         lineDashPattern = ([]);
-                        /* add */ (lineDashPattern.push(Style.DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern) > 0);
+                        /* add */ (lineDashPattern.push(Style.DASH));
+                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE));
+                        /* add */ (lineDashPattern.push(Style.SHORT_DASH));
+                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE));
+                        /* add */ (lineDashPattern.push(Style.SHORT_DASH));
+                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE));
+                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern));
                         lineDashPattern = ([]);
-                        /* add */ (lineDashPattern.push(Style.LONG_DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.LONG_SPACE) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern) > 0);
+                        /* add */ (lineDashPattern.push(Style.LONG_DASH));
+                        /* add */ (lineDashPattern.push(Style.LONG_SPACE));
+                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern));
                         lineDashPattern = ([]);
-                        /* add */ (lineDashPattern.push(Style.DOT) > 0);
-                        /* add */ (lineDashPattern.push(Style.LONG_SPACE) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern) > 0);
+                        /* add */ (lineDashPattern.push(Style.DOT));
+                        /* add */ (lineDashPattern.push(Style.LONG_SPACE));
+                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern));
                         lineDashPattern = ([]);
-                        /* add */ (lineDashPattern.push(Style.LONG_DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.LONG_SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.DOT) > 0);
-                        /* add */ (lineDashPattern.push(Style.LONG_SPACE) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern) > 0);
+                        /* add */ (lineDashPattern.push(Style.LONG_DASH));
+                        /* add */ (lineDashPattern.push(Style.LONG_SPACE));
+                        /* add */ (lineDashPattern.push(Style.DOT));
+                        /* add */ (lineDashPattern.push(Style.LONG_SPACE));
+                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern));
                         lineDashPattern = ([]);
-                        /* add */ (lineDashPattern.push(Style.LONG_DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.LONG_SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.DOT) > 0);
-                        /* add */ (lineDashPattern.push(Style.LONG_SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.DOT) > 0);
-                        /* add */ (lineDashPattern.push(Style.LONG_SPACE) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern) > 0);
+                        /* add */ (lineDashPattern.push(Style.LONG_DASH));
+                        /* add */ (lineDashPattern.push(Style.LONG_SPACE));
+                        /* add */ (lineDashPattern.push(Style.DOT));
+                        /* add */ (lineDashPattern.push(Style.LONG_SPACE));
+                        /* add */ (lineDashPattern.push(Style.DOT));
+                        /* add */ (lineDashPattern.push(Style.LONG_SPACE));
+                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern));
                         lineDashPattern = ([]);
-                        /* add */ (lineDashPattern.push(Style.LONG_DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.LONG_SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.LONG_DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.LONG_SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.DOT) > 0);
-                        /* add */ (lineDashPattern.push(Style.LONG_SPACE) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern) > 0);
+                        /* add */ (lineDashPattern.push(Style.LONG_DASH));
+                        /* add */ (lineDashPattern.push(Style.LONG_SPACE));
+                        /* add */ (lineDashPattern.push(Style.LONG_DASH));
+                        /* add */ (lineDashPattern.push(Style.LONG_SPACE));
+                        /* add */ (lineDashPattern.push(Style.DOT));
+                        /* add */ (lineDashPattern.push(Style.LONG_SPACE));
+                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern));
                         lineDashPattern = ([]);
-                        /* add */ (lineDashPattern.push(Style.XLONG_DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.LONG_SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.LONG_SPACE) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern) > 0);
+                        /* add */ (lineDashPattern.push(Style.XLONG_DASH));
+                        /* add */ (lineDashPattern.push(Style.LONG_SPACE));
+                        /* add */ (lineDashPattern.push(Style.DASH));
+                        /* add */ (lineDashPattern.push(Style.LONG_SPACE));
+                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern));
                         lineDashPattern = ([]);
-                        /* add */ (lineDashPattern.push(Style.XLONG_DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.LONG_SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.LONG_SPACE) > 0);
-                        /* add */ (lineDashPattern.push(Style.DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.LONG_SPACE) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern) > 0);
+                        /* add */ (lineDashPattern.push(Style.XLONG_DASH));
+                        /* add */ (lineDashPattern.push(Style.LONG_SPACE));
+                        /* add */ (lineDashPattern.push(Style.DASH));
+                        /* add */ (lineDashPattern.push(Style.LONG_SPACE));
+                        /* add */ (lineDashPattern.push(Style.DASH));
+                        /* add */ (lineDashPattern.push(Style.LONG_SPACE));
+                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern));
                         lineDashPattern = ([]);
-                        /* add */ (lineDashPattern.push(Style.XSHORT_DASH) > 0);
-                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE) > 0);
-                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern) > 0);
+                        /* add */ (lineDashPattern.push(Style.XSHORT_DASH));
+                        /* add */ (lineDashPattern.push(Style.SHORT_SPACE));
+                        /* add */ (Style.lineDashPatterns_$LI$().push(lineDashPattern));
                     };
                     Style.getLineDashPattern = function (pattern) {
                         if (pattern >= 0 && pattern <= 23)
@@ -8479,10 +8903,72 @@ var com;
                         }
                         else {
                             return o1 === o2;
-                        } })(childName, "ForeignData")) {
+                        } })(childName, "ForeignData")) 
+                        {
+                        	function getForeignRel(elem, filename)
+                        	{
+                        		var fdChild = elem.firstChild;
+                                
+                                while (fdChild != null) 
+                                {
+                                    if (fdChild.nodeType == 1) 
+                                    {
+                                        var fdElem = fdChild;
+                                        var grandchildName = fdElem.nodeName;
+                                        
+                                        if (grandchildName.toLowerCase() == "rel") 
+                                        {
+                                            var rid = fdElem.getAttribute("r:id");
+                                            
+                                            if (rid != null && !(rid.length === 0)) 
+                                            {
+                                                var index = filename.lastIndexOf('/');
+                                                var pre = "";
+                                                var post = "";
+                                                
+                                                try 
+                                                {
+                                                    pre = filename.substring(0, index);
+                                                    post = filename.substring(index, filename.length);
+                                                }
+                                                catch (e) 
+                                                {
+                                                    return;
+                                                }
+                                                
+                                                var relElem = model.getRelationship(rid, pre + "/_rels" + post + ".rels");
+                                                
+                                                if (relElem != null) 
+                                                {
+                                                    var target = relElem.getAttribute("Target") || "";
+                                                    var type = relElem.getAttribute("Type");
+                                                    index = target.lastIndexOf('/');
+                                                    
+                                                    try 
+                                                    {
+                                                        target = target.substring(index + 1, target.length);
+                                                    }
+                                                    catch (e) 
+                                                    {
+                                                        return;
+                                                    }
+                                                    
+                                                    return {type: type, target: target};
+                                                }
+                                                
+                                                return;
+                                            }
+                                        }
+                                    }
+                                    fdChild = fdChild.nextSibling;
+                                }
+                            }
+                            
                             var filename = elem.ownerDocument.vsdxFileName; //was getDocumentURI()
                             var iType = elem.getAttribute("ForeignType");
                             var compression = elem.getAttribute("CompressionType") || "";
+                            var typeTarget = null;
+
                             if ((function (o1, o2) { if (o1 && o1.equals) {
                                 return o1.equals(o2);
                             }
@@ -8512,70 +8998,66 @@ var com;
                             } })(iType, "EnhMetaFile")) {
                                 compression = "png"; //we convert emf files to png
                             }
+                            else if (iType == "Object") //This is a very basic support for embedded visio objects by looking for associated image
+                            {
+                                typeTarget = getForeignRel(elem, filename);
+
+                                if (typeTarget.type.indexOf('/oleObject') > 0)
+                                {
+                                    var relElem = model.getRelationship("rId1", "visio/embeddings/_rels/" + typeTarget.target + ".rels");
+                                    
+                                    if (relElem != null) 
+                                    {
+                                        var target = relElem.getAttribute("Target");
+                                        var type = relElem.getAttribute("Type");
+                                        
+                                        try 
+                                        {
+                                            var index = target.lastIndexOf('/');
+                                            target = target.substring(index + 1, target.length);
+                                        }
+                                        catch (e) 
+                                        {
+                                            return;
+                                        }
+                                        
+                                        compression = "png";
+                                        typeTarget = {type: type, target: target};
+                                    }
+                                    else
+                                    {
+                                        return;
+                                    }
+                                }
+                            }
                             else {
                                 return;
                             }
-                            var fdChild = elem.firstChild;
-                            if (fdChild != null) {
-                                if (fdChild != null && (fdChild.nodeType == 1)) {
-                                    var fdElem = fdChild;
-                                    var grandchildName = fdElem.nodeName;
-                                    if ((function (o1, o2) { if (o1 && o1.equals) {
-                                        return o1.equals(o2);
-                                    }
-                                    else {
-                                        return o1 === o2;
-                                    } })(grandchildName.toLowerCase(), "rel")) {
-                                        var rid = fdElem.getAttribute("r:id");
-                                        if (rid != null && !(rid.length === 0)) {
-                                            var index = filename.lastIndexOf('/');
-                                            var pre = "";
-                                            var post = "";
-                                            try {
-                                                pre = filename.substring(0, index);
-                                                post = filename.substring(index, filename.length);
-                                            }
-                                            catch (e) {
-                                                return;
-                                            }
-                                            ;
-                                            var relElem = model.getRelationship(rid, pre + "/_rels" + post + ".rels");
-                                            if (relElem != null) {
-                                                var target = relElem.getAttribute("Target") || "";
-                                                var type = relElem.getAttribute("Type");
-                                                index = target.lastIndexOf('/');
-                                                try {
-                                                    target = target.substring(index + 1, target.length);
-                                                }
-                                                catch (e) {
-                                                    return;
-                                                }
-                                                ;
-                                                if (type != null && (function (str, searchString) { var pos = str.length - searchString.length; var lastIndex = str.indexOf(searchString, pos); return lastIndex !== -1 && lastIndex === pos; })(type, "image")) {
-                                                    this.imageData = ({});
-                                                    var iData = model.getMedia(com.mxgraph.io.mxVsdxCodec.vsdxPlaceholder + "/media/" + target);
-                                                    if (!iData)
-                                                	{
-                                                    	/* put */ (this.imageData["iData"] = Shape.ERROR_IMAGE);
-                                                    	/* put */ (this.imageData["iType"] = 'svg+xml');
-                                                	}
-                                                    else
-                                                	{
-	                                                    /* put */ (this.imageData["iData"] = iData);
-	                                                    if ((function (str, searchString) { var pos = str.length - searchString.length; var lastIndex = str.indexOf(searchString, pos); return lastIndex !== -1 && lastIndex === pos; })(target.toLowerCase(), ".bmp")) {
-	                                                        compression = "jpg";
-	                                                    }
-	                                                    /* put */ (this.imageData["iType"] = compression);
-                                                	}
-                                                }
-                                            }
-                                            else {
-                                            }
-                                            return;
-                                        }
-                                    }
+
+                            if (typeTarget == null)
+                            {
+                                typeTarget = getForeignRel(elem, filename);
+                            }
+
+                            var type = typeTarget.type, target = typeTarget.target;
+
+                            if (type != null && (function (str, searchString) { var pos = str.length - searchString.length; var lastIndex = str.indexOf(searchString, pos); return lastIndex !== -1 && lastIndex === pos; })(type, "image")) 
+                            {
+                                this.imageData = ({});
+                                var iData = model.getMedia(com.mxgraph.io.mxVsdxCodec.vsdxPlaceholder + "/media/" + target);
+                                if (!iData)
+                                {
+                                    /* put */ (this.imageData["iData"] = Shape.ERROR_IMAGE);
+                                    /* put */ (this.imageData["iType"] = 'svg+xml');
                                 }
-                                fdChild = fdChild.nextSibling;
+                                else
+                                {
+                                    /* put */ (this.imageData["iData"] = iData);
+                                    if ((function (str, searchString) { var pos = str.length - searchString.length; var lastIndex = str.indexOf(searchString, pos); return lastIndex !== -1 && lastIndex === pos; })(target.toLowerCase(), ".bmp")) {
+                                        compression = "jpg";
+                                    }
+                                    /* put */ (this.imageData["iType"] = compression);
+                                }
                             }
                         }
                         else if ((function (o1, o2) { if (o1 && o1.equals) {
@@ -8602,7 +9084,7 @@ var com;
                             if (this.geom == null) {
                                 this.geom = ([]);
                             }
-                            /* add */ (this.geom.push(elem) > 0);
+                            /* add */ (this.geom.push(elem));
                         }
                         else if ((function (o1, o2) { if (o1 && o1.equals) {
                             return o1.equals(o2);
@@ -8748,60 +9230,29 @@ var com;
                     Shape.prototype.hasGeomList = function () {
                         return this.geomList != null && this.geomList.hasGeom();
                     };
+                    
                     /**
-                     * Transform plain text into a HTML list if the Para element referenced by
-                     * pp indicates it.
-                     * @param {string} text Text to be transformed.
-                     * @param {string} pp Reference to a Para element.
-                     * @return {string} Text like a HTML list.
+                     * Check if the paragraph is a list and return the list with its style
+                     * @param {string} pp Reference to a Para element
+                     * @return {string} the opening tag of the list with style or null if no list is found
                      */
-                    Shape.prototype.textToList = function (text, pp) {
-                        if (!(function (o1, o2) { if (o1 && o1.equals) {
-                            return o1.equals(o2);
-                        }
-                        else {
-                            return o1 === o2;
-                        } })(pp, "")) {
+                    Shape.prototype.getPPList = function (pp) 
+                    {
+                    	var ul = null;
+                    	
+                        if (pp != '') 
+                        {
                             var bullet = this.getBullet(pp);
-                            if (!(function (o1, o2) { if (o1 && o1.equals) {
-                                return o1.equals(o2);
-                            }
-                            else {
-                                return o1 === o2;
-                            } })(bullet, "0")) {
-                                var entries = text.split("\n");
-                                
-                                if (!entries[entries.length - 1]) 
-                                {
-                                	entries.pop();
-                                }
-                                
-                                var ret = "";
-                                for (var index159 = 0; index159 < entries.length; index159++) {
-                                    var entry = entries[index159];
-                                    {
-                                        ret += com.mxgraph.io.vsdx.mxVsdxUtils.surroundByTags(entry, "li");
-                                    }
-                                }
-                                ret = com.mxgraph.io.vsdx.mxVsdxUtils.surroundByTags(ret, "ul");
-                                var styleMap = ({});
-                                if ((function (o1, o2) { if (o1 && o1.equals) {
-                                    return o1.equals(o2);
-                                }
-                                else {
-                                    return o1 === o2;
-                                } })(bullet, "4")) {
-                                    /* put */ (styleMap["list-style-type"] = "square");
-                                }
-                                else {
-                                    /* put */ (styleMap["list-style-type"] = "disc");
-                                }
-                                ret = this.insertAttributes(ret, styleMap);
-                                return ret;
+                            
+                            if (bullet != '0') 
+                            {
+                            	ul = '<ul style="margin: 0;list-style-type: ' + (bullet == '4'? 'square' : 'disc') + '">';
                             }
                         }
-                        return text;
+                        
+                        return ul;
                     };
+                    
                     /**
                      * Returns the paragraph formated according the properties in the last
                      * Para element referenced.
@@ -9320,6 +9771,13 @@ var com;
                         _this.vertex = vertex || (_this.childShapes != null && !(function (m) { if (m.entries == null)
                             m.entries = []; return m.entries.length == 0; })(_this.childShapes)) || (_this.geomList != null && (!_this.geomList.isNoFill()  || _this.geomList.getGeoCount() > 1));
                         _this.layerMember = _this.getValue(_this.getCellElement$java_lang_String("LayerMember"));
+                        
+                        //We don't have a cell belongs to multiple layers
+                        if (_this.layerMember && _this.layerMember.indexOf('0;') == 0)
+                    	{
+                        	 _this.layerMember =  _this.layerMember.substr(2);
+                    	}
+                        
                         return _this;
                     }
                     VsdxShape.__static_initialize = function () { if (!VsdxShape.__static_initialized) {
@@ -9779,8 +10237,41 @@ var com;
                      * @param {*} txtChildren
                      */
                     VsdxShape.prototype.getHtmlTextContent = function (txtChildren) {
-                        var ret = "";
+                    	var ret = "";
                         var first = true;
+                        var ulMode = false;
+                        var ulModeFirst = false; 
+                        
+                    	function processLblTxt(text) 
+                        {
+                            text = com.mxgraph.io.vsdx.mxVsdxUtils.htmlEntities(text);
+                            
+                            if (ulModeFirst)
+                        	{
+                            	text = '<li>' + text;
+                            	ulModeFirst = false;
+                        	}
+                            
+                            if (ulMode)
+                        	{
+                        		var entries = text.split('\n');
+                                
+                                if (!entries[entries.length - 1]) 
+                                {
+                                	entries.pop();
+                                	ulModeFirst = true; 
+                                }
+                                
+                                text = entries.join('</li><li>');
+                        	}
+                            else
+                        	{
+                            	text = text.replace(new RegExp('\n', 'g'), '<br/>').replace(new RegExp(com.mxgraph.io.vsdx.Shape.UNICODE_LINE_SEP, 'g'), '<br/>');
+                        	}
+                            
+                            return this.getTextCharFormated(text);
+                        };
+
                         if (txtChildren != null && txtChildren.length > 0) {
                             for (var index = 0; index < txtChildren.length; index++) {
                                 var node = txtChildren.item(index);
@@ -9807,17 +10298,34 @@ var com;
                                 }
                                 else {
                                     return o1 === o2;
-                                } })(node.nodeName, "pp")) {
+                                } })(node.nodeName, "pp")) 
+                                {
                                     var elem = node;
                                     this.pp = this.getIndex(elem);
-                                    if (first) {
+
+                                    if (ulMode)
+                                	{
+                                    	//TODO closing li is wrongly placed after font (and other tags (e.g, b, i))
+                                    	ret += '</li></ul>';
+                                	}
+                                    
+                                    if (first) 
+                                    {
                                         first = false;
                                     }
-                                    else {
+                                    else 
+                                    {
                                         ret += "</p>";
                                     }
+                                    
                                     var para = "<p>";
                                     ret += this.getTextParagraphFormated(para);
+                                    
+                                    var ul = this.getPPList(this.pp);
+                                    
+                                    ulMode = ul != null;
+                                    ulModeFirst = ulMode; 
+                                    ret += ulMode? ul : '';
                                 }
                                 else if ((function (o1, o2) { if (o1 && o1.equals) {
                                     return o1.equals(o2);
@@ -9835,7 +10343,7 @@ var com;
                                         text = (function (m, k) { return m[k] ? m[k] : null; })(this.masterShape.fields, this.fld);
                                     }
                                     if (text != null)
-                                        ret += this.processLblTxt(text);
+                                        ret += processLblTxt.call(this, text);
                                 }
                                 else if ((function (o1, o2) { if (o1 && o1.equals) {
                                     return o1.equals(o2);
@@ -9844,22 +10352,23 @@ var com;
                                     return o1 === o2;
                                 } })(node.nodeName, "#text")) {
                                     var text = node.textContent;
-                                    ret += this.processLblTxt(text);
+                                    ret += processLblTxt.call(this, text);
                                 }
                             }
-                            ;
                         }
+                        
+                        if (ulMode)
+                    	{
+                        	//TODO closing li is wrongly placed after font (and other tags (e.g, b, i))
+                        	ret += '</li></ul>';
+                    	}
+                        
                         var end = first ? "" : "</p>";
                         ret += end;
                         com.mxgraph.io.vsdx.mxVsdxUtils.surroundByTags(ret, "div");
                         return ret;
                     };
-                    /*private*/ VsdxShape.prototype.processLblTxt = function (text) {
-                        text = com.mxgraph.io.vsdx.mxVsdxUtils.htmlEntities(text);
-                        text = this.textToList(text, this.pp);
-                        text = text.replace(new RegExp("\n", 'g'), "<br/>").replace(new RegExp(com.mxgraph.io.vsdx.Shape.UNICODE_LINE_SEP_$LI$(), 'g'), "<br/>");
-                        return this.getTextCharFormated(text);
-                    };
+                    
                     /**
                      * Checks if a nameU is for big connectors.
                      * @param {string} nameU NameU attribute.
@@ -10473,7 +10982,7 @@ var com;
                      * The property may to be defined in master shape or line stylesheet.<br/>
                      * @return {boolean} Returns <code>true</code> if the cell is Rounded.
                      */
-                    VsdxShape.prototype.isRounded = function () {
+                    VsdxShape.prototype.getRounding = function () {
                         var val = this.getValue(this.getCellElement$java_lang_String(com.mxgraph.io.vsdx.mxVsdxConstants.ROUNDING), "0");
                         if ((function (o1, o2) { if (o1 && o1.equals) {
                             return o1.equals(o2);
@@ -10483,7 +10992,7 @@ var com;
                         } })("Themed", val)) {
                             val = "0";
                         }
-                        return parseFloat(val) > 0;
+                        return parseFloat(val);
                     };
                     /**
                      * Return if the line has shadow.<br/>
@@ -10819,7 +11328,32 @@ var com;
                                     /* put */ (result["aspect"] = "fixed");
                                     var iType = (function (m, k) { return m[k] ? m[k] : null; })(imageData, "iType");
                                     var iData = (function (m, k) { return m[k] ? m[k] : null; })(imageData, "iData");
-                                    /* put */ (result["image"] = "data:image/" + iType + "," + iData);
+                                    
+                                    var imgOffsetX = parseFloat(this.getValue(this.getCellElement$java_lang_String('ImgOffsetX'), "0"));
+                                    var imgOffsetY = parseFloat(this.getValue(this.getCellElement$java_lang_String('ImgOffsetY'), "0"));
+                                    var imgWidth = parseFloat(this.getValue(this.getCellElement$java_lang_String('ImgWidth'), "0"));
+                                    var imgHeight = parseFloat(this.getValue(this.getCellElement$java_lang_String('ImgHeight'), "0"));
+                                    var width = parseFloat(this.getValue(this.getCellElement$java_lang_String('Width'), "0"));
+                                    var height = parseFloat(this.getValue(this.getCellElement$java_lang_String('Height'), "0"));
+                                    
+                                    if (imgOffsetX != 0 || imgOffsetY != 0)
+                                	{
+                                    	this.toBeCroppedImg = {
+                                			imgOffsetX: imgOffsetX, 
+                                			imgOffsetY: imgOffsetY, 
+                                			imgWidth: imgWidth, 
+                                			imgHeight: imgHeight,
+                                			width: width,
+                                			height: height,
+                                			iType: iType,
+                            				iData: iData
+                                    	};
+                                	}
+                                    else
+                                    {
+                                    	/* put */ (result["image"] = "data:image/" + iType + "," + iData);
+                                    }
+                                    
                                     return result;
                                 }
                                 var parsedGeom = this.parseGeom();
@@ -11038,7 +11572,26 @@ var com;
                         }
                         return false;
                     };
-                    VsdxShape.prototype.isRotatedLabel = function () {
+                    
+                    VsdxShape.prototype.isVerticalLabel = function ()
+                    {
+                    	var txtDir = this.getAttribute('TextDirection', 'V', '');
+                    	
+                    	if (!txtDir && this.masterShape != null)
+                		{
+                    		txtDir = this.masterShape.getAttribute('TextDirection', 'V', '');
+                		}
+                    	
+                    	return txtDir == '1';
+                    };
+                    
+                    VsdxShape.prototype.isRotatedLabel = function () 
+                    {
+                    	if (this.isVerticalLabel()) 
+                    	{
+                    		return true;
+                    	}
+                    		
                         var txtAngleValue = this.getAttribute(com.mxgraph.io.vsdx.mxVsdxConstants.TXT_ANGLE, "V", "");
                         if (this.masterShape != null) {
                             if ((function (o1, o2) { if (o1 && o1.equals) {
@@ -11148,7 +11701,7 @@ var com;
                                         finalX = startXY.x + widthFixed * rawX;
                                         currPoint.x = (Math.floor(Math.round(finalX * 100) / 100));
                                         currPoint.y = (Math.floor(Math.round((startXY.y - heightFixed * rawY) * 100) / 100));
-                                        /* add */ (pointList.push(currPoint) > 0);
+                                        /* add */ (pointList.push(currPoint));
                                     }
                                     ;
                                     return pointList;
@@ -11271,9 +11824,14 @@ var com;
                         else {
                             return o1 === o2;
                         } })(lbkgnd, "")) {
-                            /* put */ (this.styleMap[mxConstants.STYLE_LABEL_BACKGROUNDCOLOR] = lbkgnd);
+                        	var isFullyTransparent = this.getValue(this.getCellElement$java_lang_String('TextBkgndTrans'), '0') == '1';
+                        	
+                        	if (!isFullyTransparent)
+                        	{
+                        		/* put */ (this.styleMap[mxConstants.STYLE_LABEL_BACKGROUNDCOLOR] = lbkgnd);
+                        	}
                         }
-                        /* put */ (this.styleMap[mxConstants.STYLE_ROUNDED] = this.isRounded() ? com.mxgraph.io.vsdx.mxVsdxConstants.TRUE : com.mxgraph.io.vsdx.mxVsdxConstants.FALSE);
+                        /* put */ (this.styleMap[mxConstants.STYLE_ROUNDED] = this.getRounding() > 0 ? com.mxgraph.io.vsdx.mxVsdxConstants.TRUE : com.mxgraph.io.vsdx.mxVsdxConstants.FALSE);
                         return this.styleMap;
                     };
                     /**
@@ -11371,6 +11929,13 @@ var com;
                                 (styleMap["whiteSpace"] = "wrap");
                             /* remove */ delete styleMap["shape"];
                             /* remove */ delete styleMap["image"];
+                            
+                            if (this.isVerticalLabel())
+                        	{
+                            	txtAngleV += Math.PI + 0.01; //TODO Added 0.01 since we don't override the parent rotation if labRot is zero. Why?
+                            	styleMap['horizontal'] = '0';
+                        	}
+                            
                             var rotation = this.getRotation();
                             if (txtAngleV !== 0) {
                                 var labRot = 360 - (function (x) { return x * 180 / Math.PI; })(txtAngleV);
@@ -11938,14 +12503,16 @@ com.mxgraph.io.vsdx.mxPropertiesManager.__static_initialize();
 com.mxgraph.io.mxVsdxCodec.vsdxPlaceholder_$LI$();
 com.mxgraph.io.mxVsdxCodec.parsererrorNS_$LI$();
 
-EditorUi.prototype.doImportVisio = function(file, done, onerror)
+EditorUi.prototype.doImportVisio = function(file, done, onerror, filename)
 {
-	if (file.name != null && /(\.vs(x|sx?))($|\?)/i.test(file.name))
+	filename = filename || file.name;
+	
+	if (filename != null && /(\.vs(x|sx?))($|\?)/i.test(filename))
 	{
-		new com.mxgraph.io.mxVssxCodec().decodeVssx(file, done, null, onerror);
+		new com.mxgraph.io.mxVssxCodec(this).decodeVssx(file, done, null, onerror);
 	}
 	else
 	{
-		new com.mxgraph.io.mxVsdxCodec().decodeVsdx(file, done, null, onerror);
+		new com.mxgraph.io.mxVsdxCodec(this).decodeVsdx(file, done, null, onerror);
 	}
 };

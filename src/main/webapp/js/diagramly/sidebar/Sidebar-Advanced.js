@@ -5,6 +5,8 @@
 	
 	Sidebar.prototype.createAdvancedShapes = function()
 	{
+		this.setCurrentSearchEntryLibrary('general', 'advanced');
+		
 		var fns = sidebarCreateAdvancedShapes.apply(this, arguments);
 		
 		// Avoids having to bind all functions to "this"
@@ -53,7 +55,7 @@
 		flow4.insertEdge(edge, false);
 		flow.insert(edge);
 
-		return fns.concat(
+		fns = fns.concat(
 		[
 			this.addDataEntry('container swimlane pool horizontal', 480, 380, 'Horizontal Pool 1',
 				'zZRLbsIwEIZP4709TlHXhJYNSEicwCIjbNWJkWNKwumZxA6IlrRUaisWlmb+eX8LM5mXzdyrnV66Ai2TL0zm3rkQrbLJ0VoG3BRMzhgAp8fgdSQq+ijfKY9VuKcAYsG7snuMyso5G8U6tDaJ9cGUVlXkTXUoacuZIHOjjS0WqnX7blYd1OZt8KYea3PE1bCI+CAtVUMq7/o5b46uCmroSn18WFMm+XCdse5GpLq0OPqAzejxvZQun6MrMfiWUg6mCDpmZM8RENdotjqVyUFUdRS259oLSzISztto5Se0i44gcHEn3i9A/IQB3GbQpmi69DskAn4BSTaGBB4Jicj+k8nTGBP5SExg8odMyL38eH3s6kM8AQ=='),
@@ -82,6 +84,9 @@
 				return sb.createVertexTemplateFromCells([cell], cell.geometry.width, cell.geometry.height, 'Horizontal Flow Layout', true);
 			})
 		]);
+		
+		this.setCurrentSearchEntryLibrary();
+
+		return fns;
 	};
-	
 })();
