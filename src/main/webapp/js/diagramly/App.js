@@ -652,29 +652,25 @@ App.main = function(callback, createUi)
 			}
 		}
 
-		// Runs as progressive web app if service workers are supported
 		try
 		{
-			if (Editor.enableServiceWorker)
+			// Removes PWA cache on www.draw.io to force use of new domain via redirect
+			if (Editor.enableServiceWorker && (urlParams['offline'] == '0' ||
+				/www\.draw\.io$/.test(window.location.hostname) ||
+				(urlParams['offline'] != '1' && urlParams['dev'] == '1')))
 			{
-				// Removes PWA cache on www.draw.io to force use of new domain via redirect
-				if (urlParams['offline'] == '0' || /www\.draw\.io$/.test(window.location.hostname) ||
-					(urlParams['offline'] != '1' && urlParams['dev'] == '1'))
+				App.clearServiceWorker(function()
 				{
-					App.clearServiceWorker(function()
+					if (urlParams['offline'] == '0')
 					{
-						if (urlParams['offline'] == '0')
-						{
-							alert('Cache cleared');
-						}
-					});
-				}
-				else
-				{
-					mxStencilRegistry.allowEval = false;
-					navigator.serviceWorker.register('/service-worker.js');
-					App.loadScripts(['js/shapes.min.js', 'js/stencils.min.js', 'js/extensions.min.js']);
-				}
+						alert('Cache cleared');
+					}
+				});
+			}
+			else if (Editor.enableServiceWorker)
+			{
+				// Runs as progressive web app if service workers are supported
+				navigator.serviceWorker.register('/service-worker.js');
 			}
 		}
 		catch (e)
@@ -871,100 +867,113 @@ App.main = function(callback, createUi)
 			}
 			
 			// Main
-			var ui = (createUi != null) ? createUi() : new App(new Editor(
-					urlParams['chrome'] == '0' || uiTheme == 'min',
-					null, null, null, urlParams['chrome'] != '0'));
-			
-			if (window.mxscript != null)
+			function realMain()
 			{
-				// Loads dropbox for all browsers but IE8 and below (no CORS) if not disabled or if enabled and in embed mode
-				// KNOWN: Picker does not work in IE11 (https://dropbox.zendesk.com/requests/1650781)
-				if (typeof window.DropboxClient === 'function' &&
-					(window.Dropbox == null && window.DrawDropboxClientCallback != null &&
-					(((urlParams['embed'] != '1' && urlParams['db'] != '0') ||
-					(urlParams['embed'] == '1' && urlParams['db'] == '1')) &&
-					isSvgBrowser && (document.documentMode == null || document.documentMode > 9))))
+				var ui = (createUi != null) ? createUi() : new App(new Editor(
+						urlParams['chrome'] == '0' || uiTheme == 'min',
+						null, null, null, urlParams['chrome'] != '0'));
+				
+				if (window.mxscript != null)
 				{
-					mxscript(App.DROPBOX_URL, function()
+					// Loads dropbox for all browsers but IE8 and below (no CORS) if not disabled or if enabled and in embed mode
+					// KNOWN: Picker does not work in IE11 (https://dropbox.zendesk.com/requests/1650781)
+					if (typeof window.DropboxClient === 'function' &&
+						(window.Dropbox == null && window.DrawDropboxClientCallback != null &&
+						(((urlParams['embed'] != '1' && urlParams['db'] != '0') ||
+						(urlParams['embed'] == '1' && urlParams['db'] == '1')) &&
+						isSvgBrowser && (document.documentMode == null || document.documentMode > 9))))
 					{
-						// Must load this after the dropbox SDK since they use the same namespace
-						mxscript(App.DROPINS_URL, function()
+						mxscript(App.DROPBOX_URL, function()
 						{
-							DrawDropboxClientCallback();
-						}, 'dropboxjs', App.DROPBOX_APPKEY);
-					});
-				}
-				// Disables client
-				else if (typeof window.Dropbox === 'undefined' || typeof window.Dropbox.choose === 'undefined')
-				{
-					window.DropboxClient = null;
-				}
+							// Must load this after the dropbox SDK since they use the same namespace
+							mxscript(App.DROPINS_URL, function()
+							{
+								DrawDropboxClientCallback();
+							}, 'dropboxjs', App.DROPBOX_APPKEY);
+						});
+					}
+					// Disables client
+					else if (typeof window.Dropbox === 'undefined' || typeof window.Dropbox.choose === 'undefined')
+					{
+						window.DropboxClient = null;
+					}
+						
+					// Loads OneDrive for all browsers but IE6/IOS if not disabled or if enabled and in embed mode
+					if (typeof window.OneDriveClient === 'function' &&
+						(typeof OneDrive === 'undefined' && window.DrawOneDriveClientCallback != null &&
+						(((urlParams['embed'] != '1' && urlParams['od'] != '0') || (urlParams['embed'] == '1' &&
+						urlParams['od'] == '1')) && (navigator.userAgent == null ||
+						navigator.userAgent.indexOf('MSIE') < 0 || document.documentMode >= 10))))
+					{
+						if (urlParams['inlinePicker'] == '1' || mxClient.IS_ANDROID || mxClient.IS_IOS)
+						{
+							mxscript(App.ONEDRIVE_INLINE_PICKER_URL, function()
+							{
+								window.OneDrive = {}; //Needed to allow code that check its existance to work BUT it's not used 
+								window.DrawOneDriveClientCallback();
+							});
+						}
+						else
+						{
+							mxscript(App.ONEDRIVE_URL, window.DrawOneDriveClientCallback);
+						}
+					}
+					// Disables client
+					else if (typeof window.OneDrive === 'undefined')
+					{
+						window.OneDriveClient = null;
+					}
 					
-				// Loads OneDrive for all browsers but IE6/IOS if not disabled or if enabled and in embed mode
-				if (typeof window.OneDriveClient === 'function' &&
-					(typeof OneDrive === 'undefined' && window.DrawOneDriveClientCallback != null &&
-					(((urlParams['embed'] != '1' && urlParams['od'] != '0') || (urlParams['embed'] == '1' &&
-					urlParams['od'] == '1')) && (navigator.userAgent == null ||
-					navigator.userAgent.indexOf('MSIE') < 0 || document.documentMode >= 10))))
-				{
-					if (urlParams['inlinePicker'] == '1' || mxClient.IS_ANDROID || mxClient.IS_IOS)
+					// Loads Trello for all browsers but < IE10 if not disabled or if enabled and in embed mode
+					if (typeof window.TrelloClient === 'function' && !mxClient.IS_IE11 &&
+						typeof window.Trello === 'undefined' && window.DrawTrelloClientCallback != null &&
+						urlParams['tr'] == '1' && (navigator.userAgent == null ||
+						navigator.userAgent.indexOf('MSIE') < 0 || document.documentMode >= 10))
 					{
-						mxscript(App.ONEDRIVE_INLINE_PICKER_URL, function()
+						mxscript(App.TRELLO_JQUERY_URL, function()
 						{
-							window.OneDrive = {}; //Needed to allow code that check its existance to work BUT it's not used 
-							window.DrawOneDriveClientCallback();
+							// Must load this after the dropbox SDK since they use the same namespace
+							mxscript(App.TRELLO_URL, function()
+							{
+								DrawTrelloClientCallback();
+							});
 						});
 					}
-					else
+					// Disables client
+					else if (typeof window.Trello === 'undefined')
 					{
-						mxscript(App.ONEDRIVE_URL, window.DrawOneDriveClientCallback);
+						window.TrelloClient = null;
+					}
+		
+				}
+				
+				if (callback != null)
+				{
+					callback(ui);
+				}
+				
+				/**
+				 * For developers only
+				 */
+				if (urlParams['chrome'] != '0' && urlParams['test'] == '1')
+				{
+					EditorUi.debug('App.start', [ui, (new Date().getTime() - t0.getTime()) + 'ms']);
+					
+					if (urlParams['export'] != null)
+					{
+						EditorUi.debug('Export:', EXPORT_URL);
 					}
 				}
-				// Disables client
-				else if (typeof window.OneDrive === 'undefined')
-				{
-					window.OneDriveClient = null;
-				}
-				
-				// Loads Trello for all browsers but < IE10 if not disabled or if enabled and in embed mode
-				if (typeof window.TrelloClient === 'function' && !mxClient.IS_IE11 &&
-					typeof window.Trello === 'undefined' && window.DrawTrelloClientCallback != null &&
-					urlParams['tr'] == '1' && (navigator.userAgent == null ||
-					navigator.userAgent.indexOf('MSIE') < 0 || document.documentMode >= 10))
-				{
-					mxscript(App.TRELLO_JQUERY_URL, function()
-					{
-						// Must load this after the dropbox SDK since they use the same namespace
-						mxscript(App.TRELLO_URL, function()
-						{
-							DrawTrelloClientCallback();
-						});
-					});
-				}
-				// Disables client
-				else if (typeof window.Trello === 'undefined')
-				{
-					window.TrelloClient = null;
-				}
-	
-			}
+			};
 			
-			if (callback != null)
+			if (urlParams['dev'] == '1')
 			{
-				callback(ui);
+				realMain();
 			}
-			
-			/**
-			 * For developers only
-			 */
-			if (urlParams['chrome'] != '0' && urlParams['test'] == '1')
+			else
 			{
-				EditorUi.debug('App.start', [ui, (new Date().getTime() - t0.getTime()) + 'ms']);
-				
-				if (urlParams['export'] != null)
-				{
-					EditorUi.debug('Export:', EXPORT_URL);
-				}
+				App.loadScripts(['js/shapes.min.js', 'js/stencils.min.js',
+					'js/extensions.min.js'], realMain);
 			}
 		}, function(xhr)
 		{
@@ -1601,6 +1610,12 @@ App.prototype.init = function()
 				{
 					this.showDownloadDesktopBanner();
 				}
+				else if (urlParams['embed'] != '1' && this.getServiceName() == 'draw.io')
+
+				{
+					// just app.diagrams.net users
+					// this.showNameConfBanner();
+				}
 			}));
 		}
 		
@@ -1678,11 +1693,6 @@ App.prototype.init = function()
 		{
 			this.appIconClicked(evt);
 		}));
-		
-		if (mxClient.IS_QUIRKS)
-		{
-			this.icon.style.marginTop = '12px';
-		}
 		
 		this.menubar.container.insertBefore(this.icon, this.menubar.container.firstChild);
 	}
@@ -1825,6 +1835,17 @@ App.prototype.showNameChangeBanner = function()
 	{
 		this.openLink('https://www.diagrams.net/blog/move-diagrams-net');
 	}));
+};
+
+/**
+ * Shows a footer to download the desktop version once per session.
+ */
+App.prototype.showNameConfBanner = function()
+{
+	this.showBanner('ConfFooter', 'Try draw.io for Confluence', mxUtils.bind(this, function()
+	{
+		this.openLink('https://marketplace.atlassian.com/apps/1210933/draw-io-diagrams-for-confluence');
+	}), true);
 };
 
 /**
@@ -2463,11 +2484,6 @@ App.prototype.createBackground = function()
 	
 	mxUtils.setOpacity(bg, 100);
 	
-	if (mxClient.IS_QUIRKS)
-	{
-		new mxDivResizer(bg);
-	}
-
 	return bg;
 };
 
@@ -3012,7 +3028,6 @@ App.prototype.start = function()
 				// ignore
 			}
 			
-			// KNOWN: Does not work in quirks mode
 			mxEvent.addListener(window, 'hashchange', mxUtils.bind(this, function(evt)
 			{
 				try
@@ -3550,19 +3565,6 @@ App.prototype.showSplash = function(force)
 					Editor.useLocalStorage = prev;
 				}
 			}), true);
-		
-		if (!mxClient.IS_CHROMEAPP && !EditorUi.isElectronApp && !this.isOfflineApp() &&
-			!mxClient.IS_ANDROID && !mxClient.IS_IOS)
-		{
-			if (this.mode == App.MODE_DEVICE)
-			{
-				this.showDownloadDesktopBanner();
-			}
-			else if (urlParams['embed'] != '1' && this.getServiceName() == 'draw.io')
-			{
-				// this.showRatingBanner();
-			}
-		}
 	});
 	
 	if (this.editor.isChromelessView())
@@ -4352,7 +4354,7 @@ App.prototype.saveFile = function(forceDialog, success)
 							input.value = name.split('.').slice(0, -1).join('.');
 							input.focus();
 							
-							if (mxClient.IS_GC || mxClient.IS_FF || document.documentMode >= 5 || mxClient.IS_QUIRKS)
+							if (mxClient.IS_GC || mxClient.IS_FF || document.documentMode >= 5)
 							{
 								input.select();
 							}
@@ -5466,36 +5468,33 @@ App.prototype.loadLibraries = function(libs, done)
 						{
 							var libDesc = decodeURIComponent(id.substring(1));
 							
-							if (!this.isOffline())
+							try
 							{
-								try
+								libDesc = JSON.parse(libDesc);
+								var libObj = {
+									id: libDesc[0], 
+			               			title: libDesc[1], 
+			               			downloadUrl: libDesc[2]
+								}
+								
+								this.remoteInvoke('getFileContent', [libObj.downloadUrl], null, mxUtils.bind(this, function(libContent)
 								{
-									libDesc = JSON.parse(libDesc);
-									var libObj = {
-										id: libDesc[0], 
-				               			title: libDesc[1], 
-				               			downloadUrl: libDesc[2]
-									}
-									
-									this.remoteInvoke('getFileContent', [libObj.downloadUrl], null, mxUtils.bind(this, function(libContent)
+									try
 									{
-										try
-										{
-											onload(new RemoteLibrary(this, libContent, libObj));
-										}
-										catch (e)
-										{
-											onerror();
-										}
-									}), function()
+										onload(new RemoteLibrary(this, libContent, libObj));
+									}
+									catch (e)
 									{
 										onerror();
-									});
-								}
-								catch (e)
+									}
+								}), function()
 								{
 									onerror();
-								}
+								});
+							}
+							catch (e)
+							{
+								onerror();
 							}
 						}
 						else if (service == 'S' && this.loadDesktopLib != null)
@@ -5695,6 +5694,166 @@ App.prototype.updateButtonContainer = function()
 			this.shareButton = null;
 		}
 	}
+};
+
+
+App.prototype.fetchAndShowNotification = function(target)
+{
+	target = target || 'online';
+	
+	mxUtils.get(NOTIFICATIONS_URL + '?target=' + target, mxUtils.bind(this, function(req)
+	{
+		if (req.getStatus() >= 200 && req.getStatus() <= 299)
+		{
+		    var notifs = JSON.parse(req.getText());
+			
+			//Process and sort
+			var lsReadFlag = target + 'NotifReadTS';
+			var lastRead = parseInt(localStorage.getItem(lsReadFlag));
+			
+			for (var i = 0; i < notifs.length; i++)
+			{
+				notifs[i].isNew = (!lastRead || notifs[i].timestamp > lastRead);
+			}
+			
+			notifs.sort(function(a, b)
+			{
+				return b.timestamp - a.timestamp;
+			});
+			
+			this.showNotification(notifs, lsReadFlag);
+		}
+	}));
+};
+
+App.prototype.showNotification = function(notifs, lsReadFlag)
+{
+	function shouldAnimate(newNotif)
+	{
+		var countEl = document.querySelector('.geNotification-count');
+		countEl.innerHTML = newNotif;
+		countEl.style.display = newNotif == 0? 'none' : '';
+		var notifBell = document.querySelector('.geNotification-bell');
+		notifBell.style.animation = newNotif == 0? 'none' : '';
+		notifBell.className = 'geNotification-bell' + (newNotif == 0? ' geNotification-bellOff' : '');
+		document.querySelector('.geBell-rad').style.animation = newNotif == 0? 'none' : '';
+	}
+	
+	var markAllAsRead = mxUtils.bind(this, function()
+	{
+		this.notificationWin.style.display = 'none';
+		var unread = this.notificationWin.querySelectorAll('.circle.active');
+		
+		for (var i = 0; i < unread.length; i++)
+		{
+			unread[i].className = 'circle';
+		}
+		
+		if (notifs[0])
+		{
+			localStorage.setItem(lsReadFlag, notifs[0].timestamp);
+		}
+	});
+	
+	if (this.notificationBtn == null)
+	{
+		this.notificationBtn = document.createElement('div');
+		this.notificationBtn.className = 'geNotification-box';
+		this.notificationBtn.innerHTML = '<span class="geNotification-count"></span>' +
+										 '<div class="geNotification-bell">'+
+											'<span class="geBell-top"></span>' + 
+											'<span class="geBell-middle"></span>' +
+											'<span class="geBell-bottom"></span>' +
+											'<span class="geBell-rad"></span>' +
+										 '</div>';
+		//Add as first child such that it is the left-most one
+		this.buttonContainer.insertBefore(this.notificationBtn, this.buttonContainer.firstChild);
+		
+		this.notificationWin = document.createElement('div');
+		this.notificationWin.className = 'geNotifPanel';
+		this.notificationWin.style.display = 'none';
+		document.body.appendChild(this.notificationWin);
+		this.notificationWin.innerHTML ='<div class="header">' + 
+										'    <div class="menu-icon">' + 
+										'        <div class="dash-top"></div>' + 
+										'        <div class="dash-bottom"></div>' + 
+										'        <div class="circle"></div>' + 
+										'    </div>' + 
+										'    <span class="title">' + mxResources.get('notifications') + '</span>' + 
+										'    <span id="geNotifClose" class="closeBtn">x</span>' + 
+										'</div>' + 
+										'<div class="notifications clearfix">' +
+										'	<div id="geNotifList"  style="position: relative"></div>' + 
+										'</div>';
+		
+		mxEvent.addListener(this.notificationBtn, 'click', mxUtils.bind(this, function()
+		{
+			if (this.notificationWin.style.display == 'none')
+			{
+				this.notificationWin.style.display = '';
+				document.querySelector('.notifications').scrollTop = 0;
+				var r = this.notificationBtn.getBoundingClientRect();
+				this.notificationWin.style.top = (r.top + this.notificationBtn.clientHeight) + 'px';
+				this.notificationWin.style.left = (r.right - this.notificationWin.clientWidth) + 'px';
+				shouldAnimate(0); //Stop animation once notifications are open
+			}
+			else
+			{
+				markAllAsRead();
+			}
+		}));
+		
+		mxEvent.addListener(document.getElementById('geNotifClose'), 'click', markAllAsRead);
+	}
+		
+	var newNotif = 0;
+	var notifListEl = document.getElementById('geNotifList');
+	
+	if (notifs.length == 0)
+	{
+		notifListEl.innerHTML = '<div class="line"></div><div class="notification">' +
+								mxUtils.htmlEntities(mxResources.get('none')) + '</div>';
+	}
+	else
+	{
+		notifListEl.innerHTML = '<div class="line"></div>';
+		
+		for (var i = 0; i < notifs.length; i++)
+		{
+			(function(editorUi, notif)
+			{
+				if (notif.isNew)
+				{
+					newNotif++;
+				}
+				
+				var notifEl = document.createElement('div');
+				notifEl.className = 'notification';
+				var ts = new Date(notif.timestamp);
+				var str = editorUi.timeSince(ts);
+		
+				if (str == null)
+				{
+					str = mxResources.get('lessThanAMinute');
+				}
+				
+				notifEl.innerHTML = '<div class="circle' + (notif.isNew? ' active' : '') + '"></div><span class="time">' + 
+										mxUtils.htmlEntities(mxResources.get('timeAgo', [str], '{1} ago')) + '</span>' + 
+										'<p>' + mxUtils.htmlEntities(notif.content) + '</p>';
+				if (notif.link)
+				{
+					mxEvent.addListener(notifEl, 'click', function()
+					{
+						window.open(notif.link, 'notifWin');
+					});
+				}
+				
+				notifListEl.appendChild(notifEl);
+			})(this, notifs[i]);
+		}
+	}
+	
+	shouldAnimate(newNotif);
 };
 
 /**

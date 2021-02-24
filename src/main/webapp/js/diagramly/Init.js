@@ -1,6 +1,6 @@
 /**
- * Copyright (c) 2006-2020, JGraph Ltd
- * Copyright (c) 2006-2020, draw.io AG
+ * Copyright (c) 2006-2021, JGraph Ltd
+ * Copyright (c) 2006-2021, draw.io AG
  */
 
 // urlParams is null when used for embedding
@@ -13,8 +13,7 @@ window.isLocalStorage = window.isLocalStorage || false;
 window.mxLoadSettings = window.mxLoadSettings || urlParams['configure'] != '1';
 
 // Checks for SVG support
-window.isSvgBrowser = window.isSvgBrowser || navigator.userAgent == null ||
-	navigator.userAgent.indexOf('MSIE') < 0 || document.documentMode >= 9;
+window.isSvgBrowser = true;
 
 // CUSTOM_PARAMETERS - URLs for save and export
 window.DRAWIO_BASE_URL = window.DRAWIO_BASE_URL || ((/.*\.draw\.io$/.test(window.location.hostname)) || (/.*\.diagrams\.net$/.test(window.location.hostname)) ?
@@ -32,6 +31,7 @@ window.SAVE_URL = window.SAVE_URL || 'save';
 window.OPEN_URL = window.OPEN_URL || 'import';
 window.PROXY_URL = window.PROXY_URL || 'proxy';
 window.DRAWIO_VIEWER_URL = window.DRAWIO_VIEWER_URL || null;
+window.NOTIFICATIONS_URL = window.NOTIFICATIONS_URL || 'https://www.draw.io/notifications';
 
 // Paths and files
 window.SHAPES_PATH = window.SHAPES_PATH || 'shapes';
@@ -144,6 +144,7 @@ window.mxLanguageMap = window.mxLanguageMap ||
 	'uk' : 'Українська',
 	'he' : 'עברית',
 	'ar' : 'العربية',
+	'fa' : 'فارسی',
 	'th' : 'ไทย',
 	'ko' : '한국어',
 	'ja' : '日本語',
@@ -186,7 +187,7 @@ if (urlParams['lightbox'] == '1')
 }
 
 /**
- * Returns the global UI setting before runngin static draw.io code
+ * Returns the global UI setting before running static draw.io code
  */
 window.uiTheme = window.uiTheme || (function() 
 {
@@ -347,7 +348,8 @@ function setCurrentXml(data, filename)
 })();
 
 // Enables offline mode
-if (urlParams['offline'] == '1' || urlParams['demo'] == '1' || urlParams['stealth'] == '1' || urlParams['local'] == '1')
+if (urlParams['offline'] == '1' || urlParams['demo'] == '1' || 
+		urlParams['stealth'] == '1' || urlParams['local'] == '1' || urlParams['lockdown'] == '1')
 {
 	urlParams['picker'] = '0';
 	urlParams['gapi'] = '0';
@@ -362,12 +364,6 @@ if (urlParams['offline'] == '1' || urlParams['demo'] == '1' || urlParams['stealt
 if (urlParams['mode'] == 'trello')
 {
 	urlParams['tr'] = '1';
-}
-
-// Disables math in offline mode
-if (urlParams['offline'] == '1' || urlParams['local'] == '1')
-{
-	urlParams['math'] = '0';
 }
 
 // Uses embed mode on embed domain

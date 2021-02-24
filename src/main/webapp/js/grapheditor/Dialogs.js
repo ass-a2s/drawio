@@ -14,9 +14,7 @@ var OpenDialog = function()
 	iframe.style.overflow = 'hidden';
 	iframe.frameBorder = '0';
 	
-	// Adds padding as a workaround for box model in older IE versions
-	var dx = (mxClient.IS_VML && (document.documentMode == null || document.documentMode < 8)) ? 20 : 0;
-	
+	var dx = 0;
 	iframe.setAttribute('width', (((Editor.useLocalStorage) ? 640 : 320) + dx) + 'px');
 	iframe.setAttribute('height', (((Editor.useLocalStorage) ? 480 : 220) + dx) + 'px');
 	iframe.setAttribute('src', OPEN_FORM);
@@ -953,6 +951,25 @@ var ExportDialog = function(editorUi)
 	tbody.appendChild(row);
 	
 	row = document.createElement('tr');
+	
+	td = document.createElement('td');
+	td.style.fontSize = '10pt';
+	mxUtils.write(td, mxResources.get('grid') + ':');
+	
+	row.appendChild(td);
+	
+	var gridCheckbox = document.createElement('input');
+	gridCheckbox.setAttribute('type', 'checkbox');
+	gridCheckbox.checked = false;
+
+	td = document.createElement('td');
+	td.appendChild(gridCheckbox);
+	
+	row.appendChild(td);
+	
+	tbody.appendChild(row);
+	
+	row = document.createElement('tr');
 
 	td = document.createElement('td');
 	td.style.fontSize = '10pt';
@@ -1009,6 +1026,15 @@ var ExportDialog = function(editorUi)
 		else
 		{
 			transparentCheckbox.setAttribute('disabled', 'disabled');
+		}
+		
+		if (imageFormatSelect.value === 'png' || imageFormatSelect.value === 'jpg' || imageFormatSelect.value === 'pdf')
+		{
+			gridCheckbox.removeAttribute('disabled');
+		}
+		else
+		{
+			gridCheckbox.setAttribute('disabled', 'disabled');
 		}
 		
 		if (imageFormatSelect.value === 'png')
@@ -1137,7 +1163,7 @@ var ExportDialog = function(editorUi)
 			}
 			
 			ExportDialog.lastBorderValue = b;
-			ExportDialog.exportFile(editorUi, name, format, bg, s, b, dpi);
+			ExportDialog.exportFile(editorUi, name, format, bg, s, b, dpi, gridCheckbox.checked);
 		}
 	}));
 	saveBtn.className = 'geBtn gePrimaryBtn';
@@ -1186,7 +1212,7 @@ ExportDialog.showXmlOption = true;
  * parameter and value to be used in the request in the form
  * key=value, where value should be URL encoded.
  */
-ExportDialog.exportFile = function(editorUi, name, format, bg, s, b, dpi)
+ExportDialog.exportFile = function(editorUi, name, format, bg, s, b, dpi, grid)
 {
 	var graph = editorUi.editor.graph;
 	
@@ -1695,11 +1721,7 @@ var LinkDialog = function(editorUi, initialValue, btnLabel, fn)
 	inner.style.whiteSpace = 'nowrap';
 	inner.style.textOverflow = 'clip';
 	inner.style.cursor = 'default';
-	
-	if (!mxClient.IS_VML)
-	{
-		inner.style.paddingRight = '20px';
-	}
+	inner.style.paddingRight = '20px';
 	
 	var linkInput = document.createElement('input');
 	linkInput.setAttribute('value', initialValue);
@@ -1721,8 +1743,8 @@ var LinkDialog = function(editorUi, initialValue, btnLabel, fn)
 	cross.style.cursor = 'pointer';
 
 	// Workaround for inline-block not supported in IE
-	cross.style.display = (mxClient.IS_VML) ? 'inline' : 'inline-block';
-	cross.style.top = ((mxClient.IS_VML) ? 0 : 3) + 'px';
+	cross.style.display = 'inline-block';
+	cross.style.top = '3px';
 	
 	// Needed to block event transparency in IE
 	cross.style.background = 'url(' + IMAGE_PATH + '/transparent.gif)';
@@ -1741,7 +1763,7 @@ var LinkDialog = function(editorUi, initialValue, btnLabel, fn)
 	{
 		linkInput.focus();
 		
-		if (mxClient.IS_GC || mxClient.IS_FF || document.documentMode >= 5 || mxClient.IS_QUIRKS)
+		if (mxClient.IS_GC || mxClient.IS_FF || document.documentMode >= 5)
 		{
 			linkInput.select();
 		}
@@ -2024,18 +2046,8 @@ var LayersWindow = function(editorUi, x, y, w, h)
 	ldiv.style.display = 'block';
 	ldiv.style.whiteSpace = 'nowrap';
 	
-	if (mxClient.IS_QUIRKS)
-	{
-		ldiv.style.filter = 'none';
-	}
-	
 	var link = document.createElement('a');
 	link.className = 'geButton';
-	
-	if (mxClient.IS_QUIRKS)
-	{
-		link.style.filter = 'none';
-	}
 	
 	var removeLink = link.cloneNode();
 	removeLink.innerHTML = '<div class="geSprite geSprite-delete" style="display:inline-block;"></div>';
@@ -2361,7 +2373,7 @@ var LayersWindow = function(editorUi, x, y, w, h)
 			if (graph.isEnabled())
 			{
 				// Fallback if no drag and drop is available
-				if (mxClient.IS_TOUCH || mxClient.IS_POINTER || mxClient.IS_VML ||
+				if (mxClient.IS_TOUCH || mxClient.IS_POINTER ||
 					(mxClient.IS_IE && document.documentMode < 10))
 				{
 					var right = document.createElement('div');

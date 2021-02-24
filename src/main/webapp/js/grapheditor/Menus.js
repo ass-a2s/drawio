@@ -650,20 +650,13 @@ Menus.prototype.addInsertTableItem = function(menu, insertFn, parent)
 	// Show table size dialog
 	var elt2 = menu.addItem('', null, null, parent, null, null, null, true);
 	
-	// Quirks mode does not add cell padding if cell is empty, needs good old spacer solution
-	var quirksCellHtml = '<img src="' + mxClient.imageBasePath + '/transparent.gif' + '" width="16" height="16"/>';
-
 	function createPicker(rows, cols)
 	{
 		var table2 = document.createElement('table');
 		table2.setAttribute('border', '1');
 		table2.style.borderCollapse = 'collapse';
 		table2.style.borderStyle = 'solid';
-
-		if (!mxClient.IS_QUIRKS)
-		{
-			table2.setAttribute('cellPadding', '8');
-		}
+		table2.setAttribute('cellPadding', '8');
 		
 		for (var i = 0; i < rows; i++)
 		{
@@ -672,11 +665,6 @@ Menus.prototype.addInsertTableItem = function(menu, insertFn, parent)
 			for (var j = 0; j < cols; j++)
 			{
 				var cell = row.insertCell(-1);
-				
-				if (mxClient.IS_QUIRKS)
-				{
-					cell.innerHTML = quirksCellHtml;
-				}
 			}
 		}
 		
@@ -692,11 +680,6 @@ Menus.prototype.addInsertTableItem = function(menu, insertFn, parent)
 			for (var j = 0; j < picker.rows[0].cells.length; j++)
 			{
 				var cell = row.insertCell(-1);
-				
-				if (mxClient.IS_QUIRKS)
-				{
-					cell.innerHTML = quirksCellHtml;
-				}
 			}
 		}
 		
@@ -707,11 +690,6 @@ Menus.prototype.addInsertTableItem = function(menu, insertFn, parent)
 			for (var j = row.cells.length; j < cols; j++)
 			{
 				var cell = row.insertCell(-1);
-				
-				if (mxClient.IS_QUIRKS)
-				{
-					cell.innerHTML = quirksCellHtml;
-				}
 			}
 		}
 	};
@@ -1039,9 +1017,9 @@ Menus.prototype.addMenuItem = function(menu, key, parent, trigger, sprite, label
 
 	if (action != null && (menu.showDisabled || action.isEnabled()) && action.visible)
 	{
-		var item = menu.addItem(label || action.label, null, function()
+		var item = menu.addItem(label || action.label, null, function(evt)
 		{
-			action.funct(trigger);
+			action.funct(trigger, evt);
 		}, parent, sprite, action.isEnabled());
 		
 		// Adds checkmark image

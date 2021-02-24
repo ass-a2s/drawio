@@ -782,6 +782,58 @@
 				// Add help, link button
 				var value = localStorage.getItem('.configuration');
 				
+				var buttons = [[mxResources.get('reset'), function(evt, input)
+				{
+					editorUi.confirm(mxResources.get('areYouSure'), function()
+					{
+						try
+						{
+							localStorage.removeItem('.configuration');
+							
+							if (mxEvent.isShiftDown(evt))
+							{
+								localStorage.removeItem('.drawio-config');
+								localStorage.removeItem('.mode');
+							}
+							
+							editorUi.hideDialog();
+							editorUi.alert(mxResources.get('restartForChangeRequired'));
+						}
+						catch (e)
+						{
+							editorUi.handleError(e);
+						}
+					});
+				}]];
+				
+				if (!EditorUi.isElectronApp)
+				{
+					buttons.push([mxResources.get('link'), function(evt, input)
+					{
+						if (input.value.length > 0)
+						{
+							try
+							{
+								var obj = JSON.parse(input.value);
+								var url = window.location.protocol + '//' + window.location.host +
+									'/' + editorUi.getSearch() + '#_CONFIG_' +
+									Graph.compress(JSON.stringify(obj));
+								var dlg = new EmbedDialog(editorUi, url);
+								editorUi.showDialog(dlg.container, 440, 240, true);
+								dlg.init();
+							}
+							catch (e)
+							{
+								editorUi.handleError(e);	
+							}
+						}
+						else
+						{
+							editorUi.handleError({message: mxResources.get('invalidInput')});
+						}
+					}])
+				}
+
 		    	var dlg = new TextareaDialog(editorUi, mxResources.get('configuration') + ':',
 		    		(value != null) ? JSON.stringify(JSON.parse(value), null, 2) : '', function(newValue)
 				{
@@ -810,48 +862,7 @@
 					}
 				}, null, null, null, null, null, true, null, null,
 					'https://www.diagrams.net/doc/faq/configure-diagram-editor',
-					(EditorUi.isElectronApp) ? null : [[mxResources.get('reset'), function(evt, input)
-					{
-						editorUi.confirm(mxResources.get('areYouSure'), function()
-						{
-							try
-							{
-								localStorage.removeItem('.configuration');
-								localStorage.removeItem('.drawio-config');
-								localStorage.removeItem('.mode');
-								
-								editorUi.hideDialog();
-								editorUi.alert(mxResources.get('restartForChangeRequired'));
-							}
-							catch (e)
-							{
-								editorUi.handleError(e);	
-							}
-						});
-					}], [mxResources.get('link'), function(evt, input)
-					{
-						if (input.value.length > 0)
-						{
-							try
-							{
-								var obj = JSON.parse(input.value);
-								var url = window.location.protocol + '//' + window.location.host +
-									'/' + editorUi.getSearch() + '#_CONFIG_' +
-									Graph.compress(JSON.stringify(obj));
-								var dlg = new EmbedDialog(editorUi, url);
-								editorUi.showDialog(dlg.container, 440, 240, true);
-								dlg.init();
-							}
-							catch (e)
-							{
-								editorUi.handleError(e);	
-							}
-						}
-						else
-						{
-							editorUi.handleError({message: mxResources.get('invalidInput')});
-						}
-					}]]);
+					buttons);
 		    	
 		    	dlg.textarea.style.width = '600px';
 		    	dlg.textarea.style.height = '380px';
@@ -913,7 +924,7 @@
 			{
 				var menubar = menusCreateMenuBar.apply(this, arguments);
 				
-				if (menubar != null)
+				if (menubar != null && urlParams['noLangIcon'] != '1')
 				{
 					var langMenu = this.get('language');
 					
@@ -943,33 +954,26 @@
 						{
 							elt.style.top = '0px';
 						}
+
+						var icon = document.createElement('div');
+						icon.style.backgroundImage = 'url(' + Editor.globeImage + ')';
+						icon.style.backgroundPosition = 'center center';
+						icon.style.backgroundRepeat = 'no-repeat';
+						icon.style.backgroundSize = '19px 19px';
+						icon.style.position = 'absolute';
+						icon.style.height = '19px';
+						icon.style.width = '19px';
+						icon.style.marginTop = '2px';
+						icon.style.zIndex = '1';
+						elt.appendChild(icon);
+						mxUtils.setOpacity(elt, 40);
 						
-						if (!mxClient.IS_VML)
+						if (uiTheme == 'atlas' || uiTheme == 'dark')
 						{
-							var icon = document.createElement('div');
-							icon.style.backgroundImage = 'url(' + Editor.globeImage + ')';
-							icon.style.backgroundPosition = 'center center';
-							icon.style.backgroundRepeat = 'no-repeat';
-							icon.style.backgroundSize = '19px 19px';
-							icon.style.position = 'absolute';
-							icon.style.height = '19px';
-							icon.style.width = '19px';
-							icon.style.marginTop = '2px';
-							icon.style.zIndex = '1';
-							elt.appendChild(icon);
-							mxUtils.setOpacity(elt, 40);
-							
-							if (uiTheme == 'atlas' || uiTheme == 'dark')
-							{
-								elt.style.opacity = '0.85';
-								elt.style.filter = 'invert(100%)';
-							}
+							elt.style.opacity = '0.85';
+							elt.style.filter = 'invert(100%)';
 						}
-						else
-						{
-							elt.innerHTML = '<div class="geIcon geSprite geSprite-globe"/>';
-						}
-						
+
 						document.body.appendChild(elt);
 					}
 				}
@@ -3269,6 +3273,12 @@
 		
 		this.put('extras', new Menu(mxUtils.bind(this, function(menu, parent)
 		{
+			if (urlParams['noLangIcon'] == '1')
+			{
+				this.addSubmenu('language', menu, parent);
+				menu.addSeparator(parent);
+			}
+			
 			if (urlParams['embed'] != '1')
 			{
 				this.addSubmenu('theme', menu, parent);
@@ -3478,7 +3488,7 @@
 					
 					if (editorUi.isOfflineApp())
 					{
-						if (navigator.onLine && urlParams['stealth'] != '1')
+						if (navigator.onLine && urlParams['stealth'] != '1' && urlParams['lockdown'] != '1')
 						{
 							this.addMenuItems(menu, ['upload'], parent);
 						}

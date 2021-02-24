@@ -3,6 +3,34 @@
  */
 Draw.loadPlugin(function(ui)
 {
+	// Handle data governess by modifying external services URLs
+	var allowedRegions = {
+		eu: 1,
+		us: 1
+	};
+	
+	if (allowedRegions[urlParams['dataGov']])
+	{
+		var region = urlParams['dataGov'];
+		var urls = {
+			'EXPORT_URL': 'export',
+			'PLANT_URL': 'plant',
+			'VSD_CONVERT_URL': 'vsd',
+			'EMF_CONVERT_URL': 'emf',
+			'OPEN_URL': 'import'
+		};
+		
+		for (var key in urls)
+		{
+			var val = window[key];
+			
+			if (val)
+			{
+				window[key] = '/region-' + urls[key] + '-' + region;
+			}
+		}
+	}
+
 	// Extracts macro data from JSON protocol
 	var macroData = {};
 	
@@ -28,6 +56,9 @@ Draw.loadPlugin(function(ui)
 				
 				ui.initComments(macroData.contentId || macroData.custContentId);
 				macroData.diagramDisplayName = data.title;
+				
+				//Fetch notifications
+				ui.fetchAndShowNotification('conf');	
 			}
 		}
 		catch (e)

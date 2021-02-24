@@ -318,16 +318,7 @@ Sidebar.prototype.showTooltip = function(elt, cells, w, h, title, showLabel)
 				var width = bounds.width + 2 * this.tooltipBorder + 4;
 				var height = bounds.height + 2 * this.tooltipBorder;
 				
-				if (mxClient.IS_QUIRKS)
-				{
-					height += 4;
-					this.tooltip.style.overflow = 'hidden';
-				}
-				else
-				{
-					this.tooltip.style.overflow = 'visible';
-				}
-
+				this.tooltip.style.overflow = 'visible';
 				this.tooltip.style.width = width + 'px';
 				var w2 = width;
 				
@@ -745,16 +736,7 @@ Sidebar.prototype.addSearchPalette = function(expand)
 	cross.setAttribute('title', mxResources.get('search'));
 	cross.style.position = 'relative';
 	cross.style.left = '-18px';
-	
-	if (mxClient.IS_QUIRKS)
-	{
-		input.style.height = '28px';
-		cross.style.top = '-4px';
-	}
-	else
-	{
-		cross.style.top = '1px';
-	}
+	cross.style.top = '1px';
 
 	// Needed to block event transparency in IE
 	cross.style.background = 'url(\'' + this.editorUi.editor.transparentImage + '\')';
@@ -1089,7 +1071,7 @@ Sidebar.prototype.addGeneralPalette = function(expand)
 	 	this.createVertexTemplateEntry('shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;', 30, 60, 'Actor', 'Actor', false, null, 'user person human stickman'),
 	 	this.createVertexTemplateEntry('shape=xor;whiteSpace=wrap;html=1;', 60, 80, '', 'Or', null, null, 'logic or'),
 	 	this.createVertexTemplateEntry('shape=or;whiteSpace=wrap;html=1;', 60, 80, '', 'And', null, null, 'logic and'),
-	 	this.createVertexTemplateEntry('shape=dataStorage;whiteSpace=wrap;html=1;fixedSize=1;', 100, 80, '', 'Data Storage'),    
+	 	this.createVertexTemplateEntry('shape=dataStorage;whiteSpace=wrap;html=1;fixedSize=1;', 100, 80, '', 'Data Storage'),
 	 	this.addEntry('curve', mxUtils.bind(this, function()
 	 	{
 			var cell = new mxCell('', new mxGeometry(0, 0, 50, 50), 'curved=1;endArrow=classic;html=1;');
@@ -2150,22 +2132,10 @@ Sidebar.prototype.createThumb = function(cells, width, height, parent, title, sh
 	{
 		node = this.graph.container.cloneNode(false);
 		node.innerHTML = this.graph.container.innerHTML;
-		
-		// Workaround for clipping in older IE versions
-		if (mxClient.IS_QUIRKS || document.documentMode == 8)
-		{
-			node.firstChild.style.overflow = 'visible';
-		}
 	}
 	
 	this.graph.getModel().clear();
 	mxClient.NO_FO = fo;
-	
-	// Catch-all event handling
-	if (mxClient.IS_IE6)
-	{
-		parent.style.backgroundImage = 'url(' + this.editorUi.editor.transparentImage + ')';
-	}
 	
 	node.style.position = 'relative';
 	node.style.overflow = 'hidden';
@@ -2182,7 +2152,7 @@ Sidebar.prototype.createThumb = function(cells, width, height, parent, title, sh
 	// Adds title for sidebar entries
 	if (this.sidebarTitles && title != null && showTitle != false)
 	{
-		var border = (mxClient.IS_QUIRKS) ? 2 * this.thumbPadding + 2: 0;
+		var border = 0;
 		parent.style.height = (this.thumbHeight + border + this.sidebarTitleSize + 8) + 'px';
 		
 		var div = document.createElement('div');
@@ -2205,6 +2175,28 @@ Sidebar.prototype.createThumb = function(cells, width, height, parent, title, sh
 };
 
 /**
+ * Returns a function that creates a title.
+ */
+Sidebar.prototype.createSection = function(title)
+{
+	return mxUtils.bind(this, function()
+	{
+		var elt = document.createElement('div');
+		elt.setAttribute('title', title);
+		elt.style.textOverflow = 'ellipsis';
+		elt.style.whiteSpace = 'nowrap';
+		elt.style.textAlign = 'center';
+		elt.style.overflow = 'hidden';
+		elt.style.width = '100%';
+		elt.style.padding = '14px 0';
+		
+		mxUtils.write(elt, title);
+		
+		return elt;
+	});
+};
+
+/**
  * Creates and returns a new palette item for the given image.
  */
 Sidebar.prototype.createItem = function(cells, title, showLabel, showTitle, width, height, allowCellsInserted)
@@ -2212,15 +2204,10 @@ Sidebar.prototype.createItem = function(cells, title, showLabel, showTitle, widt
 	var elt = document.createElement('a');
 	elt.className = 'geItem';
 	elt.style.overflow = 'hidden';
-	var border = (mxClient.IS_QUIRKS) ? 8 + 2 * this.thumbPadding : 2 * this.thumbBorder;
+	var border = 2 * this.thumbBorder;
 	elt.style.width = (this.thumbWidth + border) + 'px';
 	elt.style.height = (this.thumbHeight + border) + 'px';
 	elt.style.padding = this.thumbPadding + 'px';
-	
-	if (mxClient.IS_IE6)
-	{
-		elt.style.border = 'none';
-	}
 	
 	// Blocks default click action
 	mxEvent.addListener(elt, 'click', function(evt)
@@ -2916,34 +2903,9 @@ Sidebar.prototype.createDragSource = function(elt, dropHandler, preview, cells, 
 	function createArrow(img, tooltip)
 	{
 		var arrow = null;
-		
-		if (mxClient.IS_IE && !mxClient.IS_SVG)
-		{
-			// Workaround for PNG images in IE6
-			if (mxClient.IS_IE6 && document.compatMode != 'CSS1Compat')
-			{
-				arrow = document.createElement(mxClient.VML_PREFIX + ':image');
-				arrow.setAttribute('src', img.src);
-				arrow.style.borderStyle = 'none';
-			}
-			else
-			{
-				arrow = document.createElement('div');
-				arrow.style.backgroundImage = 'url(' + img.src + ')';
-				arrow.style.backgroundPosition = 'center';
-				arrow.style.backgroundRepeat = 'no-repeat';
-			}
-			
-			arrow.style.width = (img.width + 4) + 'px';
-			arrow.style.height = (img.height + 4) + 'px';
-			arrow.style.display = (mxClient.IS_QUIRKS) ? 'inline' : 'inline-block';
-		}
-		else
-		{
-			arrow = mxUtils.createImage(img.src);
-			arrow.style.width = img.width + 'px';
-			arrow.style.height = img.height + 'px';
-		}
+		arrow = mxUtils.createImage(img.src);
+		arrow.style.width = img.width + 'px';
+		arrow.style.height = img.height + 'px';
 		
 		if (tooltip != null)
 		{
@@ -3852,14 +3814,12 @@ Sidebar.prototype.addFoldingHandler = function(title, content, funct)
 	}));
 	
 	// Prevents focus
-	if (!mxClient.IS_QUIRKS)
+
+	mxEvent.addListener(title, (mxClient.IS_POINTER) ? 'pointerdown' : 'mousedown',
+		mxUtils.bind(this, function(evt)
 	{
-	    mxEvent.addListener(title, (mxClient.IS_POINTER) ? 'pointerdown' : 'mousedown',
-	    	mxUtils.bind(this, function(evt)
-		{
-			evt.preventDefault();
-		}));
-	}
+		evt.preventDefault();
+	}));
 };
 
 /**

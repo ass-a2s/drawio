@@ -8,7 +8,7 @@ LucidImporter = {};
 (function()
 {
 	// Global import transformation
-	var defaultFontSize = '11';
+	var defaultFontSize = '13';
 	var defaultLucidFont = 'Liberation Sans';
 	var scale = 0.75;
 	var dx = 0;
@@ -3801,9 +3801,9 @@ LucidImporter = {};
 			'PresentationFrameBlock' : cs,
 //Timeline
 //TODO Timeline shapes are postponed, this code is a work-in-progress
-			//'TimelineBlock' : cs,
-			//'TimelineMilestoneBlock' : cs,
-			//'TimelineIntervalBlock' : cs,
+			'TimelineBlock' : cs,
+			'TimelineMilestoneBlock' : cs,
+			'TimelineIntervalBlock' : cs,
 			'MinimalTextBlock' : 'strokeColor=none;fillColor=none',
 //Freehand			
 			'FreehandBlock' : cs,
@@ -3855,6 +3855,11 @@ LucidImporter = {};
 		catch(e) {}
 		
 		return '';
+	};
+	
+	function fix1Digit(num)
+	{
+		return  Math.round(num * 10) / 10;	
 	};
 	
 	// actual code start
@@ -4016,21 +4021,67 @@ LucidImporter = {};
 			if (t != null)
 			{
 				str += '<li style="text-align:' + (styles['a']? styles['a'].v : (props.TextAlign || 'center')) + ';';
+				var color, fontSize;
 				
-				if (nonBlockStyles != null && nonBlockStyles['c'])
+				// Find font size/color
+				if (nonBlockStyles != null)
 				{
-					var v = rgbToHex(nonBlockStyles['c'].v);
-					
-					if (v != null)
+					if (nonBlockStyles['c'])
 					{
-						v = v.substring(0, 7);
-						str += 'color:' + v + ';';
+						color = nonBlockStyles['c'].v;
 					}
+					
+					if (nonBlockStyles['s'])
+					{
+						fontSize = nonBlockStyles['s'].v;
+					}
+				}
+					
+				try
+				{
+					var s = m[i], e = ends[j];
+					var it = i;
+					
+					if (s && e && s.s < e.e) //s can be null when all starts are used, e ends after s BUT sometimes there are errors in the file
+					{
+						var curS = s.s;
+		
+						while(s != null && s.s == curS)
+						{
+							if (s.n == 's')
+							{
+								fontSize = s.v;
+							}
+							else if (s.n == 'c')
+							{
+								color = s.v;
+							}
+							
+							s = m[++it];
+						}
+					}					
+				}
+				catch(e)
+				{
+					console.log(e);
+				}
+				
+				color = rgbToHex(color);
+				
+				if (color != null)
+				{
+					color = color.substring(0, 7);
+					str += 'color:' + color + ';';
+				}
+				
+				if (fontSize != null)
+				{
+					str += 'font-size:' + fix1Digit(fontSize * scale) + 'px;';
 				}
 				
 				str += '">';
 				openBlockTags.push('li');
-				str += '<span style="font-size:' + defaultFontSize + 'px;';
+				str += '<span style="';
 				openBlockTags.push('span');
 			}
 			
@@ -4048,34 +4099,34 @@ LucidImporter = {};
 					jc = 'flex-end';
 				}
 				
-				str += 'display: flex; justify-content: ' + jc + '; text-align: ' + tmp + '; align-items: baseline; font-size: 0; line-height: 1;';
+				str += 'display: flex; justify-content: ' + jc + '; text-align: ' + tmp + '; align-items: baseline; font-size: 0; line-height: 1.25;';
 			}
 			
 			if (styles['il'])
 			{
-				str += 'margin-left: ' + Math.max(0, Math.round(styles['il'].v * scale - (listActive? 28 : 0))) + 'px;';
+				str += 'margin-left: ' + Math.max(0, fix1Digit(styles['il'].v * scale - (listActive? 28 : 0))) + 'px;';
 			}
 
 			if (styles['ir'])
 			{
-				str += 'margin-right: ' + Math.round(styles['ir'].v * scale) + 'px;';
+				str += 'margin-right: ' + fix1Digit(styles['ir'].v * scale) + 'px;';
 			}
 
 			if (styles['mt'])
 			{
-				str += 'margin-top: ' + Math.round(styles['mt'].v * scale) + 'px;';
+				str += 'margin-top: ' + fix1Digit(styles['mt'].v * scale) + 'px;';
 			}
 
 			if (styles['mb'])
 			{
-				str += 'margin-bottom: ' + Math.round(styles['mb'].v * scale) + 'px;';
+				str += 'margin-bottom: ' + fix1Digit(styles['mb'].v * scale) + 'px;';
 			}
 
-			str += '">';
+			str += 'margin-top: -2px;">';
 			
 			if (!listActive)
 			{
-				str += '<span style="font-size:' + defaultFontSize + 'px;">';
+				str += '<span>';// Is this needed?
 				openBlockTags.push('span');
 			}
 			
@@ -4106,7 +4157,7 @@ LucidImporter = {};
 			openTags.push('span');
 			tagCount++;
 
-			str += 'font-size:' + (styles['s']? Math.floor(styles['s'].v * scale) : defaultFontSize) + 'px;';
+			str += 'font-size:' + (styles['s']? fix1Digit(styles['s'].v * scale) : defaultFontSize) + 'px;';
 
 			if (styles['c'])
 			{
@@ -4199,6 +4250,12 @@ LucidImporter = {};
 			if (listActive)
 			{
 				str = str.trim();
+			}
+			
+			//If an endTag is called with no open tags, add a dummy startTag to have a font size
+			if (openTags.length == 0 && str.length > 0)
+			{
+				str = startTag({dummy: 1}) + str;
 			}
 			
 			str = str.replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -4321,7 +4378,7 @@ LucidImporter = {};
 		{
 			if (curE != maxE)
 			{
-				html += txt.substring(curE, maxE);
+				html += startTag({dummy: 1}) + endTag(txt, curE, maxE);
 			}
 			
 			html += endBlockTag(true); 
@@ -4400,7 +4457,7 @@ LucidImporter = {};
 				{
 					for (var i = 0; i < m.length; i++)
 					{
-						if (m[i].s > 0 || (m[i].e != null && m[i].e < txt.length) || m[i].n == 't' || m[i].n == 'ac')
+						if (m[i].s > 0 || (m[i].e != null && m[i].e < txt.length) || m[i].n == 't' || m[i].n == 'ac' || m[i].n == 'lk')
 						{
 							isLastLblHTML = true;
 							break;
@@ -4658,7 +4715,7 @@ LucidImporter = {};
 					{
 						isV = true;
 						
-						return 'fontSize=' + Math.floor(currM.v * scale) + ';';
+						return 'fontSize=' + fix1Digit(currM.v * scale) + ';';
 					}
 				}
 				i++;
@@ -4723,23 +4780,6 @@ LucidImporter = {};
 		}
 	};
 	
-	function getLinkFromM(m)
-	{
-		if (m != null)
-		{
-			for (var i = 0; i < m.length; i++)
-			{
-				if (m[i].n == 'lk' && m[i].v != null &&
-					m[i].v.length > 0)
-				{
-					return getLink(m[i].v[0]);
-				}
-			}
-		}
-		
-		return null;
-	}
-
 	function getFontColor(properties)
 	{
 		//adds font color
@@ -4914,7 +4954,7 @@ LucidImporter = {};
 				{
 					if (currM.n == 'il')
 					{
-						return 'spacingLeft=' + currM.v * scale + ';';
+						return 'spacingLeft=' + fix1Digit(currM.v * scale) + ';';
 					}
 					/*else
 					{
@@ -4955,7 +4995,7 @@ LucidImporter = {};
 					{
 						isIR = true;
 						
-						return 'spacingRight=' + currM.v * scale + ';';
+						return 'spacingRight=' + fix1Digit(currM.v * scale) + ';';
 					}
 				}
 				
@@ -4985,7 +5025,7 @@ LucidImporter = {};
 					if (currM.v != null)
 					{
 						isMT = true;
-						return 'spacingTop=' + currM.v * scale + ';';
+						return 'spacingTop=' + fix1Digit(currM.v * scale) + ';';
 					}
 				}
 				
@@ -5015,7 +5055,7 @@ LucidImporter = {};
 					if (currM.v != null)
 					{
 						isMB = true;
-						return 'spacingBottom=' + currM.v * scale + ';';
+						return 'spacingBottom=' + fix1Digit(currM.v * scale) + ';';
 					}
 				}
 				
@@ -5031,7 +5071,7 @@ LucidImporter = {};
 		//adds global spacing
 		if (typeof properties.InsetMargin === 'number')
 		{
-				return 'spacing=' + Math.max(0, Math.round(parseInt(properties.InsetMargin) * scale)) + ';';
+			return 'spacing=' + Math.max(0, fix1Digit((properties.InsetMargin) * scale)) + ';';
 		}
 	
 		return '';
@@ -5139,7 +5179,7 @@ LucidImporter = {};
 			{
 				if (properties.Rounding > 0)
 				{
-					return 'rounded=1;absoluteArcSize=1;arcSize=' + Math.round(properties.Rounding * scale) + ';';
+					return 'rounded=1;absoluteArcSize=1;arcSize=' + fix1Digit(properties.Rounding * scale) + ';';
 				}
 			}
 //			else if (properties.Rounding == null)
@@ -5289,44 +5329,44 @@ LucidImporter = {};
 		// Stroke style
 		if (properties.StrokeStyle == 'dotted')
 		{
-			return 'dashed=1;dashPattern=1 4;';
+			return 'dashed=1;fixDash=1;dashPattern=1 4;';
 		}
 		else if (properties.StrokeStyle == 'dashdot')
 		{
-			return 'dashed=1;dashPattern=10 5 1 5;';
+			return 'dashed=1;fixDash=1;dashPattern=10 5 1 5;';
 		}
 		else if (properties.StrokeStyle == 'dashdotdot')
 		{
-			return 'dashed=1;dashPattern=10 5 1 5 1 5;';
+			return 'dashed=1;fixDash=1;dashPattern=10 5 1 5 1 5;';
 		}
 		else if (properties.StrokeStyle == 'dotdotdot')
 		{
-			return 'dashed=1;dashPattern=1 2;';
+			return 'dashed=1;fixDash=1;dashPattern=1 2;';
 		}
 		else if (properties.StrokeStyle == 'longdash')
 		{
-			return 'dashed=1;dashPattern=16 6;';
+			return 'dashed=1;fixDash=1;dashPattern=16 6;';
 		}
 		else if (properties.StrokeStyle == 'dashlongdash')
 		{
-			return 'dashed=1;dashPattern=10 6 16 6;';
+			return 'dashed=1;fixDash=1;dashPattern=10 6 16 6;';
 		}
 		else if (properties.StrokeStyle == 'dashed24')
 		{
-			return 'dashed=1;dashPattern=3 8;';
+			return 'dashed=1;fixDash=1;dashPattern=3 8;';
 		}
 		else if (properties.StrokeStyle == 'dashed32')
 		{
-			return 'dashed=1;dashPattern=6 5;';
+			return 'dashed=1;fixDash=1;dashPattern=6 5;';
 		}
 		else if (properties.StrokeStyle == 'dashed44')
 		{
-			return 'dashed=1;dashPattern=8 8;';
+			return 'dashed=1;fixDash=1;dashPattern=8 8;';
 		}
 		else if (properties.StrokeStyle != null && properties.
 			StrokeStyle.substring(0, 6) == 'dashed')
 		{
-			return 'dashed=1;';
+			return 'dashed=1;fixDash=1;';
 		} 
 		
 		return '';
@@ -5334,7 +5374,7 @@ LucidImporter = {};
 	
 	function getStrokeWidth(properties)
 	{
-		return properties.LineWidth != null? createStyle(mxConstants.STYLE_STROKEWIDTH, Math.round(parseFloat(properties.LineWidth) * scale), '1') : '';
+		return properties.LineWidth != null? createStyle(mxConstants.STYLE_STROKEWIDTH, fix1Digit(parseFloat(properties.LineWidth) * scale), '1') : '';
 	}
 	
 	function getImage(properties, action, url)
@@ -5399,16 +5439,6 @@ LucidImporter = {};
 		{
 			graph.setAttributeForCell(cell, 'link', getLink(p.Link[0]));
 		}
-		//If the text has a link, it will be handled by html labels
-		/*else if (p.Text != null)
-		{
-			var link = getLinkFromM(getTextM(p.Text));
-			
-			if (link != null)
-			{
-				graph.setAttributeForCell(cell, 'link', link);
-			}
-		}*/
 		
 		replacePlaceholders(cell, graph);
 		
@@ -5572,6 +5602,7 @@ LucidImporter = {};
 					{
 						cell.style += 'rounded=0;';
 					}
+					var isCurved = false;
 					
 					if (p.Shape != 'diagonal')
 					{
@@ -5597,6 +5628,7 @@ LucidImporter = {};
 							if (p.Shape == 'curve')
 							{
 								cell.style += 'curved=1;';
+								isCurved = true;
 							}
 						}
 					}
@@ -5647,7 +5679,7 @@ LucidImporter = {};
 					}
 
 					var waypoints = p.ElbowControlPoints != null && p.ElbowControlPoints.length > 0? p.ElbowControlPoints : 
-						(p.BezierJoints != null && p.BezierJoints.length > 0? p.BezierJoints : p.Joints);
+						(isCurved && p.BezierJoints != null && p.BezierJoints.length > 0? p.BezierJoints : p.Joints);
 					
 					if (waypoints != null)
 					{
@@ -5859,7 +5891,7 @@ LucidImporter = {};
 			{
 				if (obj.Value.m[i].n == 's')
 				{
-					size = scale * parseFloat(obj.Value.m[i].v);
+					size = fix1Digit(scale * parseFloat(obj.Value.m[i].v));
 				}
 				else if (obj.Value.m[i].n == 'c')
 				{
@@ -6096,6 +6128,7 @@ LucidImporter = {};
 						if (g.Generators[key].ClassName == 'OrgChart2018')
 						{
 							LucidImporter.hasUnknownShapes = true;
+							LucidImporter.hasOrgChart = true;
 							console.log('Lucid diagram has an Org Chart!');
 							//createOrgChart(obj, graph, lookup, queue);
 						}
@@ -6122,6 +6155,7 @@ LucidImporter = {};
 						if (obj.GeneratorData.p.ClassName == 'OrgChart2018')
 						{
 							LucidImporter.hasUnknownShapes = true;
+							LucidImporter.hasOrgChart = true;
 							console.log('Lucid diagram has an Org Chart!');
 							//createOrgChart(obj, graph, lookup, queue);
 						}
@@ -6201,6 +6235,12 @@ LucidImporter = {};
 				var src = (p.Endpoint1.Block != null) ? lookup[p.Endpoint1.Block] : null;
 				var trg = (p.Endpoint2.Block != null) ? lookup[p.Endpoint2.Block] : null;
 				var e = createEdge(obj, graph, src, trg);
+
+				if ((p.Endpoint1 && p.Endpoint1.Line) || (p.Endpoint2 && p.Endpoint2.Line))
+				{
+					console.log('Edge to Edge case');
+					LucidImporter.hasUnknownShapes = true;
+				}
 				
 				if (src == null && p.Endpoint1 != null)
 				{
@@ -12245,7 +12285,7 @@ LucidImporter = {};
 						var extH = p.ExtraHeightSet && i == 1? (p.ExtraHeight * scale) : 0;
 						
 						var curH = Math.round((h - th) * itemH) + extH;
-						item[i] = new mxCell('', new mxGeometry(0, curY, w, curH), 'part=1;html=1;resizeHeight=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;');
+						item[i] = new mxCell('', new mxGeometry(0, curY, w, curH), 'part=1;html=1;whiteSpace=wrap;resizeHeight=0;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;');
 						curY += curH;
 						item[i].vertex = true;
 						v.insert(item[i]);
@@ -12301,7 +12341,7 @@ LucidImporter = {};
 				{
 					var itemH = 0;
 					var curH = p['Field' + (i + 1) + '_h'] * scale;
-					item[i] = new mxCell('', new mxGeometry(0, curY, w, curH), 'part=1;resizeHeight=0;strokeColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=1;');
+					item[i] = new mxCell('', new mxGeometry(0, curY, w, curH), 'part=1;resizeHeight=0;strokeColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=1;whiteSpace=wrap;');
 					curY += curH;
 					item[i].vertex = true;
 					v.insert(item[i]);
@@ -12365,7 +12405,7 @@ LucidImporter = {};
 				{
 					var itemH = 0;
 
-					key[i] = new mxCell('', new mxGeometry(0, currH, keyW, p['Key' + (i + 1) + '_h'] * scale), 'strokeColor=none;part=1;resizeHeight=0;align=center;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=1;');
+					key[i] = new mxCell('', new mxGeometry(0, currH, keyW, p['Key' + (i + 1) + '_h'] * scale), 'strokeColor=none;part=1;resizeHeight=0;align=center;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=1;whiteSpace=wrap;');
 					key[i].vertex = true;
 					v.insert(key[i]);
 					key[i].style += st +
@@ -12385,7 +12425,7 @@ LucidImporter = {};
 
 					key[i].value = convertText(p['Key' + (i + 1)]);
 					
-					item[i] = new mxCell('', new mxGeometry(keyW, currH, w - keyW, p['Field' + (i + 1) + '_h'] * scale), 'shape=partialRectangle;top=0;right=0;bottom=0;part=1;resizeHeight=0;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=1;');
+					item[i] = new mxCell('', new mxGeometry(keyW, currH, w - keyW, p['Field' + (i + 1) + '_h'] * scale), 'shape=partialRectangle;top=0;right=0;bottom=0;part=1;resizeHeight=0;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;html=1;whiteSpace=wrap;');
 					item[i].vertex = true;
 					v.insert(item[i]);
 					item[i].style += st +
@@ -12451,7 +12491,7 @@ LucidImporter = {};
 				{
 					var itemH = 0;
 
-					key[i] = new mxCell('', new mxGeometry(0, currH, keyW, p['Field' + (i + 1) + '_h'] * scale), 'strokeColor=none;part=1;resizeHeight=0;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;');
+					key[i] = new mxCell('', new mxGeometry(0, currH, keyW, p['Field' + (i + 1) + '_h'] * scale), 'strokeColor=none;part=1;resizeHeight=0;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;');
 					key[i].vertex = true;
 					v.insert(key[i]);
 					key[i].style += st +
@@ -12472,7 +12512,7 @@ LucidImporter = {};
 					key[i].value = convertText(p['Field' + (i + 1)]);
 					key[i].style += addAllStyles(key[i].style, p, a, key[i], isLastLblHTML);
 					
-					item[i] = new mxCell('', new mxGeometry(keyW, currH, w - keyW, p['Type' + (i + 1) + '_h'] * scale), 'shape=partialRectangle;top=0;right=0;bottom=0;part=1;resizeHeight=0;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;');
+					item[i] = new mxCell('', new mxGeometry(keyW, currH, w - keyW, p['Type' + (i + 1) + '_h'] * scale), 'shape=partialRectangle;top=0;right=0;bottom=0;part=1;resizeHeight=0;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;');
 					item[i].vertex = true;
 					v.insert(item[i]);
 					item[i].style += st +
@@ -12544,7 +12584,7 @@ LucidImporter = {};
 				{
 					var itemH = 0;
 
-					key[i] = new mxCell('', new mxGeometry(0, currH, keyW, p['Key' + (i + 1) + '_h'] * scale), 'strokeColor=none;part=1;resizeHeight=0;align=center;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;');
+					key[i] = new mxCell('', new mxGeometry(0, currH, keyW, p['Key' + (i + 1) + '_h'] * scale), 'strokeColor=none;part=1;resizeHeight=0;align=center;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;');
 					key[i].vertex = true;
 					v.insert(key[i]);
 					key[i].style += st +
@@ -12565,7 +12605,7 @@ LucidImporter = {};
 					key[i].value = convertText(p['Key' + (i + 1)]);
 					key[i].style += addAllStyles(key[i].style, p, a, key[i], isLastLblHTML);
 					
-					item[i] = new mxCell('', new mxGeometry(keyW, currH, w - keyW - typeW, p['Field' + (i + 1) + '_h'] * scale), 'shape=partialRectangle;top=0;right=0;bottom=0;part=1;resizeHeight=0;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;');
+					item[i] = new mxCell('', new mxGeometry(keyW, currH, w - keyW - typeW, p['Field' + (i + 1) + '_h'] * scale), 'shape=partialRectangle;top=0;right=0;bottom=0;part=1;resizeHeight=0;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;');
 					item[i].vertex = true;
 					v.insert(item[i]);
 					item[i].style += st +
@@ -12586,7 +12626,7 @@ LucidImporter = {};
 					item[i].value = convertText(p['Field' + (i + 1)]);
 					item[i].style += addAllStyles(item[i].style, p, a, item[i], isLastLblHTML);
 					
-					type[i] = new mxCell('', new mxGeometry(w - typeW, currH, typeW, p['Type' + (i + 1) + '_h'] * scale), 'shape=partialRectangle;top=0;right=0;bottom=0;part=1;resizeHeight=0;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;');
+					type[i] = new mxCell('', new mxGeometry(w - typeW, currH, typeW, p['Type' + (i + 1) + '_h'] * scale), 'shape=partialRectangle;top=0;right=0;bottom=0;part=1;resizeHeight=0;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;');
 					type[i].vertex = true;
 					v.insert(type[i]);
 					type[i].style += st +
@@ -12872,7 +12912,7 @@ LucidImporter = {};
 				break;
 			case 'TimelineBlock':
 			//TODO Timeline shapes are postponed, this code is a work-in-progress
-				try
+			/*	try
 				{
 					var daysMap = {
 						'Sunday': 0,
@@ -12944,10 +12984,12 @@ LucidImporter = {};
 				{
 					console.log(e); //Ignore
 				}
-				break;
+				break;*/
 			case 'TimelineMilestoneBlock':
-				break;
+			//	break;
 			case 'TimelineIntervalBlock':
+				LucidImporter.hasTimeLine = true;
+				LucidImporter.hasUnknownShapes = true;
 				break;
 			case 'FreehandBlock':
 				try
